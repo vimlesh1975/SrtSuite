@@ -116,7 +116,6 @@ public sealed partial class SrtReceiverEngine : IDisposable
             args.AddRange(new[]
             {
                 "-map", "0:a:0?",
-                "-af", "aresample=async=1000:first_pts=0",
                 "-c:a", "pcm_s16le",
                 "-ar", "48000",
                 "-ac", "2",
@@ -272,7 +271,7 @@ public sealed partial class SrtReceiverEngine : IDisposable
                     Log("[RX ENGINE] First video frame received! Live stream active on DeckLink SDI.\n");
                 }
 
-                // 1. Output to physical DeckLink SDI hardware (video + audio synchronous on same thread)
+                // 1. Output to physical DeckLink SDI hardware
                 if (_deckLinkEngine is not null)
                 {
                     bool ok = _deckLinkEngine.DisplayVideoFrame(frameBuffer);
@@ -280,7 +279,6 @@ public sealed partial class SrtReceiverEngine : IDisposable
                     {
                         Log($"[DECKLINK ERROR] Frame {frameNumber} failed: {_deckLinkEngine.LastErrorMessage}\n");
                     }
-                    _deckLinkEngine.WriteQueuedAudio();
                 }
 
                 // 2. In-App Preview (frame 1 immediately, then every 4th frame = ~6 fps preview to save UI CPU)
@@ -342,21 +340,34 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
             Log("[RX AUDIO] Connected to decoded PCM audio stream from FFmpeg!\n");
             var stream = client.GetStream();
-            var audioBuffer = new byte[3840]; // ~20ms chunk of 48kHz stereo 16-bit PCM (960 sample frames * 4 bytes)
+            var audioBuffer = new byte[7680]; // ~40ms chunk of 48kHz stereo 16-bit PCM (1920 sample frames * 4 bytes)
+            int remainder = 0;
             long totalAudioBytes = 0;
 
             while (!token.IsCancellationRequested)
             {
-                int read = stream.Read(audioBuffer, 0, audioBuffer.Length);
+                int read = stream.Read(audioBuffer, remainder, audioBuffer.Length - remainder);
                 if (read <= 0) break;
 
-                // Non-blocking enqueue directly into DeckLink audio queue (consumed synchronously by video pump)
-                _deckLinkEngine?.EnqueueAudio(audioBuffer, read);
+                int totalBytes = remainder + read;
+                int usableBytes = (totalBytes / 4) * 4; // exact 4-byte frames for 16-bit stereo
+                remainder = totalBytes - usableBytes;
 
-                totalAudioBytes += read;
-                if (totalAudioBytes % 960000 < read) // Log every ~5 seconds (48000 * 4 * 5 = 960,000 bytes)
+                if (usableBytes > 0)
                 {
-                    Log($"[RX AUDIO] Received embedded SDI audio: {totalAudioBytes / 192000.0:F1}s | SDI samples played: {_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0}\n");
+                    _deckLinkEngine?.WriteAudioPcm(audioBuffer, usableBytes, token);
+                    totalAudioBytes += usableBytes;
+
+                    if (totalAudioBytes % 960000 < usableBytes)
+                    {
+                        Log($"[RX AUDIO] Received embedded SDI audio: {totalAudioBytes / 192000.0:F1}s | SDI samples played: {_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0}\n");
+                    }
+                }
+
+                // If any odd 1..3 bytes remain, copy them to start of buffer for next read
+                if (remainder > 0)
+                {
+                    Buffer.BlockCopy(audioBuffer, usableBytes, audioBuffer, 0, remainder);
                 }
             }
         }

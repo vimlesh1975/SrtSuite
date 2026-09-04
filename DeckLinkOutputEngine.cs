@@ -14,10 +14,6 @@ public sealed class DeckLinkOutputEngine : IDisposable
     private bool _audioEnabled;
     private int _audioChannels = 2;
 
-    // Thread-safe audio queue consumed synchronously by the video pump thread
-    private readonly ConcurrentQueue<byte[]> _audioQueue = new();
-    private int _queuedBytes = 0;
-    private const int MaxQueuedBytes = 48000 * 4 / 4; // ~250ms of 48kHz stereo 16-bit audio (48,000 bytes)
     public long TotalAudioSampleFramesWritten { get; private set; }
 
     public int Width { get; private set; }
@@ -187,50 +183,21 @@ public sealed class DeckLinkOutputEngine : IDisposable
         }
     }
 
-    public void EnqueueAudio(byte[] pcmData, int byteCount)
+    public unsafe void WriteAudioPcm(byte[] pcmData, int byteCount, CancellationToken token = default)
     {
-        if (!_audioEnabled || byteCount <= 0)
-        {
-            return;
-        }
+        if (!_audioEnabled || _output is null || byteCount <= 0) return;
 
-        // Drop oldest packets if buffer exceeds ~250ms (avoids latency build-up)
-        while (_queuedBytes + byteCount > MaxQueuedBytes && _audioQueue.TryDequeue(out var dropped))
-        {
-            Interlocked.Add(ref _queuedBytes, -dropped.Length);
-        }
-
-        var chunk = new byte[byteCount];
-        Buffer.BlockCopy(pcmData, 0, chunk, 0, byteCount);
-        _audioQueue.Enqueue(chunk);
-        Interlocked.Add(ref _queuedBytes, byteCount);
-    }
-
-    public void WriteQueuedAudio()
-    {
-        if (!_audioEnabled || _output is null) return;
-
-        while (_audioQueue.TryDequeue(out var chunk))
-        {
-            if (chunk.Length == 0) continue;
-            Interlocked.Add(ref _queuedBytes, -chunk.Length);
-            WriteChunkDirect(chunk);
-        }
-    }
-
-    private unsafe void WriteChunkDirect(byte[] chunk)
-    {
         int bytesPerSampleFrame = _audioChannels * 2; // 16-bit = 2 bytes per channel
-        int sampleFrameCount = chunk.Length / bytesPerSampleFrame;
+        int sampleFrameCount = byteCount / bytesPerSampleFrame;
         if (sampleFrameCount == 0) return;
 
-        fixed (byte* ptr = chunk)
+        fixed (byte* ptr = pcmData)
         {
             uint totalWritten = 0;
-            while (totalWritten < (uint)sampleFrameCount)
+            while (totalWritten < (uint)sampleFrameCount && !token.IsCancellationRequested)
             {
                 var remaining = (uint)sampleFrameCount - totalWritten;
-                uint written;
+                uint written = 0;
 
                 try
                 {
@@ -253,20 +220,18 @@ public sealed class DeckLinkOutputEngine : IDisposable
                 {
                     totalWritten += written;
                     TotalAudioSampleFramesWritten += written;
-                    continue;
                 }
-
-                // If hardware FIFO buffer is temporarily full, break out
-                break;
+                else
+                {
+                    // Hardware FIFO temporarily full; sleep briefly to let SDI playout drain FIFO
+                    Thread.Sleep(2);
+                }
             }
         }
     }
 
     public void Shutdown()
     {
-        while (_audioQueue.TryDequeue(out _)) { }
-        _queuedBytes = 0;
-
         lock (_outputLock)
         {
             if (_output is not null)
