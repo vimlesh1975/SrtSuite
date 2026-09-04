@@ -1,0 +1,22 @@
+# Intermediate build files
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+
+# Logs
+*.log
+rx.log
+tx.log
+test_audio.log
+
+# Duplicate ffmpeg scratch folder (already included in bin/Release/net10.0-windows/win-x64)
+ffmpeg/
+
+# Allow Release output binaries explicitly
+!bin/
+!bin/Release/
+!bin/Release/net10.0-windows/
+!bin/Release/net10.0-windows/win-x64/
+!bin/Release/net10.0-windows/win-x64/**
