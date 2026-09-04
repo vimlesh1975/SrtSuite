@@ -5,8 +5,9 @@ obj/
 .vs/
 .vscode/
 
-# Logs
+# Logs (ignore everywhere, including bin directories)
 *.log
+**/*.log
 rx.log
 tx.log
 test_audio.log
@@ -14,9 +15,12 @@ test_audio.log
 # Duplicate ffmpeg scratch folder (already included in bin/Release/net10.0-windows/win-x64)
 ffmpeg/
 
-# Allow Release output binaries explicitly
+# Allow Release output binaries explicitly except logs
 !bin/
 !bin/Release/
 !bin/Release/net10.0-windows/
 !bin/Release/net10.0-windows/win-x64/
 !bin/Release/net10.0-windows/win-x64/**
+bin/**/rx.log
+bin/**/tx.log
+bin/**/*.log
