@@ -28,6 +28,7 @@ public sealed class AppSettings
     public int RxLatency { get; set; } = 120;
     public string RxPassphrase { get; set; } = "";
     public string RxStreamId { get; set; } = "";
+    public int RxAudioDelayMs { get; set; } = 0;
 
     public static string SettingsFilePath
     {

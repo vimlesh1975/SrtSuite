@@ -57,6 +57,7 @@ public sealed partial class MainForm : Form
     private NumericUpDown _numRxLatency = null!;
     private TextBox _txtRxPassphrase = null!;
     private TextBox _txtRxStreamId = null!;
+    private NumericUpDown _numRxAudioDelay = null!;
     private Button _btnRxStart = null!;
     private Button _btnRxStop = null!;
     private Label _lblRxStatusBadge = null!;
@@ -111,6 +112,7 @@ public sealed partial class MainForm : Form
         _numRxLatency.Value = Math.Clamp(_appSettings.RxLatency, _numRxLatency.Minimum, _numRxLatency.Maximum);
         _txtRxPassphrase.Text = _appSettings.RxPassphrase;
         _txtRxStreamId.Text = _appSettings.RxStreamId;
+        _numRxAudioDelay.Value = Math.Clamp(_appSettings.RxAudioDelayMs, _numRxAudioDelay.Minimum, _numRxAudioDelay.Maximum);
     }
 
     private static void SelectComboItem(ComboBox cbo, string? value)
@@ -156,6 +158,7 @@ public sealed partial class MainForm : Form
             _appSettings.RxLatency = (int)_numRxLatency.Value;
             _appSettings.RxPassphrase = _txtRxPassphrase.Text.Trim();
             _appSettings.RxStreamId = _txtRxStreamId.Text.Trim();
+            _appSettings.RxAudioDelayMs = (int)_numRxAudioDelay.Value;
 
             _appSettings.Save();
         }
@@ -347,6 +350,11 @@ public sealed partial class MainForm : Form
             });
         };
 
+        _numRxAudioDelay.ValueChanged += (_, _) =>
+        {
+            _rxEngine.AudioDelayMs = (int)_numRxAudioDelay.Value;
+        };
+
         // Remember selections immediately on change
         _cboTxDevice.SelectedIndexChanged += (_, _) =>
         {
@@ -454,7 +462,8 @@ public sealed partial class MainForm : Form
             StreamId: string.IsNullOrWhiteSpace(_txtRxStreamId.Text) ? null : _txtRxStreamId.Text.Trim(),
             EnableDeckLinkPlayout: _chkRxEnableDeckLink.Checked,
             DeckLinkDevice: _cboRxDevice.SelectedItem?.ToString() ?? "DeckLink Duo (1)",
-            FormatCode: formatCode
+            FormatCode: formatCode,
+            AudioDelayMs: (int)_numRxAudioDelay.Value
         );
 
         _rxEngine.Start(settings);
@@ -1080,7 +1089,7 @@ public sealed partial class MainForm : Form
         pnl.Controls.Add(_txtRxPassphrase);
         y += 32;
 
-        // StreamID
+        // StreamID & Lip-Sync Audio Delay
         pnl.Controls.Add(CreateFieldLabel("Stream ID:", 10, y));
         _txtRxStreamId = new TextBox
         {
@@ -1089,7 +1098,21 @@ public sealed partial class MainForm : Form
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
-        pnl.Controls.Add(_txtRxStreamId);
+
+        pnl.Controls.Add(CreateFieldLabel("Audio Sync (ms):", 330, y));
+        _numRxAudioDelay = new NumericUpDown
+        {
+            Location = new Point(440, y - 3),
+            Width = 170,
+            Minimum = -1000,
+            Maximum = 1000,
+            Value = 0,
+            Increment = 10,
+            BackColor = Color.FromArgb(40, 44, 52),
+            ForeColor = Color.White
+        };
+
+        pnl.Controls.AddRange(new Control[] { _txtRxStreamId, _numRxAudioDelay });
         y += 38;
 
         // Action Buttons

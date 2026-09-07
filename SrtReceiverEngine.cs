@@ -17,6 +17,14 @@ public sealed partial class SrtReceiverEngine : IDisposable
     private Thread? _audioPumpThread;
     private TcpListener? _audioListener;
     private DeckLinkOutputEngine? _deckLinkEngine;
+    private readonly AudioFifo _audioFifo = new();
+    private volatile int _audioDelayMs;
+
+    public int AudioDelayMs
+    {
+        get => _audioDelayMs;
+        set => _audioDelayMs = value;
+    }
 
     public event Action<string>? OnLog;
     public event Action<StreamStats>? OnStats;
@@ -95,17 +103,19 @@ public sealed partial class SrtReceiverEngine : IDisposable
         }
 
         // 2. Prepare FFmpeg decode arguments
+        DeckLinkInterop.ResolveDisplayMode(settings.FormatCode, out int targetW, out int targetH, out double targetFps);
         var srtUrl = BuildSrtUrl(settings);
         var args = new List<string>
         {
             "-hide_banner",
-            "-fflags", "+genpts+nobuffer",
+            "-fflags", "nobuffer",
             "-flags", "low_delay",
             "-thread_queue_size", "4096",
             "-i", srtUrl,
             "-map", "0:v:0",
-            "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=uyvy422,fps=25",
+            "-vf", $"setpts=PTS-STARTPTS,scale={targetW}:{targetH}:force_original_aspect_ratio=decrease,pad={targetW}:{targetH}:(ow-iw)/2:(oh-ih)/2,format=uyvy422,fps=fps={targetFps:0.##}:round=near",
             "-pix_fmt", "uyvy422",
+            "-fps_mode", "passthrough",
             "-max_muxing_queue_size", "4096",
             "-f", "rawvideo",
             "pipe:1"
@@ -116,6 +126,7 @@ public sealed partial class SrtReceiverEngine : IDisposable
             args.AddRange(new[]
             {
                 "-map", "0:a:0?",
+                "-af", "asetpts=PTS-STARTPTS,aresample=async=1000:first_pts=0",
                 "-c:a", "pcm_s16le",
                 "-ar", "48000",
                 "-ac", "2",
@@ -218,19 +229,26 @@ public sealed partial class SrtReceiverEngine : IDisposable
         _audioPumpThread?.Join(1000);
         _audioPumpThread = null;
 
+        _audioFifo.Clear();
+
         OnStatusChanged?.Invoke(false);
     }
 
     private void DedicatedVideoPump(RxSettings settings, Stream videoStream, ManualResetEventSlim deckLinkReady, CancellationToken token)
     {
+        int width = 1920;
+        int height = 1080;
+        double frameRate = 25.0;
+
         if (settings.EnableDeckLinkPlayout && !string.IsNullOrWhiteSpace(settings.DeckLinkDevice))
         {
             try
             {
                 _deckLinkEngine = new DeckLinkOutputEngine();
                 var format = string.IsNullOrWhiteSpace(settings.FormatCode) ? "Hi50" : settings.FormatCode;
+                DeckLinkInterop.ResolveDisplayMode(format, out width, out height, out frameRate);
                 _deckLinkEngine.Initialize(settings.DeckLinkDevice, format, enableAudio: true);
-                Log($"[DECKLINK] Initialized SDI Output: {settings.DeckLinkDevice} ({format} 1080i50)\n");
+                Log($"[DECKLINK] Initialized SDI Output: {settings.DeckLinkDevice} ({format} {width}x{height} @ {frameRate:F2}fps)\n");
                 Log("[DECKLINK] Standby colorbars active on SDI out (locking monitor sync)\n");
             }
             catch (Exception ex)
@@ -240,18 +258,30 @@ public sealed partial class SrtReceiverEngine : IDisposable
                 _deckLinkEngine = null;
             }
         }
+        else
+        {
+            var format = string.IsNullOrWhiteSpace(settings.FormatCode) ? "Hi50" : settings.FormatCode;
+            DeckLinkInterop.ResolveDisplayMode(format, out width, out height, out frameRate);
+        }
 
         deckLinkReady.Set();
 
-        const int width = 1920;
-        const int height = 1080;
-        const int frameBytes = width * height * 2; // UYVY422 = 4,147,200 bytes
+        int frameBytes = width * height * 2; // UYVY422 = 2 bytes per pixel
         var frameBuffer = new byte[frameBytes];
         var frameNumber = 0L;
         var stopwatch = new Stopwatch();
-        var frameTicks = Stopwatch.Frequency / 25L; // 25.00 fps reference clock
+        var frameTicks = (long)(Stopwatch.Frequency / frameRate);
+
+        // Audio cadence: 48kHz stereo 16-bit PCM (4 bytes per sample frame)
+        // At 25fps = 1,920 samples = 7,680 bytes per video frame
+        int samplesPerFrame = (int)Math.Round(48000.0 / frameRate);
+        int audioBytesPerFrame = samplesPerFrame * 4;
+        var audioFrameBuffer = new byte[audioBytesPerFrame];
 
         Log("[RX ENGINE] Waiting for incoming SRT stream packets...\n");
+
+        _audioFifo.Clear();
+        _audioDelayMs = settings.AudioDelayMs;
 
         try
         {
@@ -268,12 +298,58 @@ public sealed partial class SrtReceiverEngine : IDisposable
                 if (frameNumber == 1)
                 {
                     stopwatch.Start();
-                    Log("[RX ENGINE] First video frame received! Live stream active on DeckLink SDI.\n");
+                    Log("[RX ENGINE] First video frame received! Synchronous live playout active on DeckLink SDI.\n");
                 }
 
-                // 1. Output to physical DeckLink SDI hardware
+                // Output to physical DeckLink SDI hardware (Synchronous Video + Audio on same thread)
                 if (_deckLinkEngine is not null)
                 {
+                    // 1. Synchronous Audio Playout:
+                    // Calculate lip-sync delay offset in bytes (48 samples/ms * 4 bytes/sample = 192 bytes/ms)
+                    int delayOffsetBytes = (_audioDelayMs * 192);
+
+                    // Prevent buffer overflow / latency accumulation if video stalls
+                    int maxAllowedBuffer = Math.Max(audioBytesPerFrame * 8, delayOffsetBytes + audioBytesPerFrame * 4);
+                    if (_audioFifo.Count > maxAllowedBuffer)
+                    {
+                        _audioFifo.TrimTo(maxAllowedBuffer);
+                    }
+
+                    int bytesToRead = audioBytesPerFrame;
+                    int readAudio = 0;
+
+                    if (delayOffsetBytes > 0)
+                    {
+                        // Audio delay requested: wait until buffer has accumulated the requested delay
+                        if (_audioFifo.Count >= delayOffsetBytes + bytesToRead)
+                        {
+                            readAudio = _audioFifo.Read(audioFrameBuffer, 0, bytesToRead);
+                        }
+                    }
+                    else if (delayOffsetBytes < 0)
+                    {
+                        // Audio advance requested: drop |delayOffsetBytes| from the head
+                        int advanceDrop = Math.Min(-delayOffsetBytes, _audioFifo.Count);
+                        if (advanceDrop > 0)
+                        {
+                            _audioFifo.Read(new byte[advanceDrop], 0, advanceDrop);
+                        }
+                        readAudio = _audioFifo.Read(audioFrameBuffer, 0, bytesToRead);
+                    }
+                    else
+                    {
+                        readAudio = _audioFifo.Read(audioFrameBuffer, 0, bytesToRead);
+                    }
+
+                    if (readAudio < bytesToRead)
+                    {
+                        // Pad underruns with clean silence so hardware audio FIFO stays full
+                        Array.Clear(audioFrameBuffer, readAudio, bytesToRead - readAudio);
+                    }
+
+                    _deckLinkEngine.WriteAudioPcm(audioFrameBuffer, bytesToRead, token);
+
+                    // 2. Synchronous Video Playout:
                     bool ok = _deckLinkEngine.DisplayVideoFrame(frameBuffer);
                     if (!ok && frameNumber % 50 == 1)
                     {
@@ -281,7 +357,7 @@ public sealed partial class SrtReceiverEngine : IDisposable
                     }
                 }
 
-                // 2. In-App Preview (frame 1 immediately, then every 4th frame = ~6 fps preview to save UI CPU)
+                // In-App Preview (frame 1 immediately, then every 4th frame = ~6 fps preview to save UI CPU)
                 if (frameNumber == 1 || frameNumber % 4 == 0)
                 {
                     try
@@ -292,12 +368,13 @@ public sealed partial class SrtReceiverEngine : IDisposable
                     catch { }
                 }
 
-                if (frameNumber % 125 == 0)
+                int logCadence = Math.Max((int)(frameRate * 5), 25);
+                if (frameNumber % logCadence == 0)
                 {
-                    Log($"[RX SDI] Continuous live playout: {frameNumber} frames played to DeckLink ({frameNumber / 25.0:F1}s)\n");
+                    Log($"[RX SDI] Continuous live playout: {frameNumber} frames ({frameNumber / frameRate:F1}s) | Audio played: {_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0} samples ({(_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0) / 48000.0:F1}s)\n");
                 }
 
-                // 3. Frame pacing (capped to prevent artificial pipeline stall)
+                // Frame pacing
                 var targetTicks = frameNumber * frameTicks;
                 var remainingTicks = targetTicks - stopwatch.ElapsedTicks;
                 if (remainingTicks > 0)
@@ -307,6 +384,12 @@ public sealed partial class SrtReceiverEngine : IDisposable
                     {
                         Thread.Sleep(delayMs);
                     }
+                }
+                else if (remainingTicks < -frameTicks * 10)
+                {
+                    // If video lagged significantly behind wall clock, re-anchor baseline
+                    stopwatch.Restart();
+                    frameNumber = 0;
                 }
             }
         }
@@ -355,12 +438,12 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
                 if (usableBytes > 0)
                 {
-                    _deckLinkEngine?.WriteAudioPcm(audioBuffer, usableBytes, token);
+                    _audioFifo.Write(audioBuffer, 0, usableBytes);
                     totalAudioBytes += usableBytes;
 
                     if (totalAudioBytes % 960000 < usableBytes)
                     {
-                        Log($"[RX AUDIO] Received embedded SDI audio: {totalAudioBytes / 192000.0:F1}s | SDI samples played: {_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0}\n");
+                        Log($"[RX AUDIO] Received embedded SDI audio: {totalAudioBytes / 192000.0:F1}s | FIFO buffer: {_audioFifo.Count / 192.0:F0}ms | SDI samples played: {_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0}\n");
                     }
                 }
 
