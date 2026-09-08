@@ -29,6 +29,8 @@ public sealed class AppSettings
     public string RxPassphrase { get; set; } = "";
     public string RxStreamId { get; set; } = "";
     public int RxAudioDelayMs { get; set; } = 0;
+    public bool ShowLogs { get; set; } = false;
+    public string Theme { get; set; } = "Dark";
 
     public static string SettingsFilePath
     {

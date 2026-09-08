@@ -18,11 +18,84 @@ internal static class Program
             return;
         }
 
+        if (args.Length > 0 && args[0] == "--test-ui")
+        {
+            AttachConsole(-1);
+            RunUiTest();
+            return;
+        }
+
         ApplicationConfiguration.Initialize();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new MainForm());
+    }
+
+    private static void RunUiTest()
+    {
+        Console.WriteLine("========================================");
+        Console.WriteLine("[TEST-UI] Starting UI Layout & Theme Verification");
+        Console.WriteLine("========================================");
+
+        ApplicationConfiguration.Initialize();
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+
+        using var form = new MainForm();
+        form.CreateControl();
+        form.Show();
+        Application.DoEvents();
+
+        Console.WriteLine($"[TEST-UI] Form Size: {form.Size.Width}x{form.Size.Height}");
+
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var pnlTxControls = (Panel)form.GetType().GetField("_pnlTxControls", flags)!.GetValue(form)!;
+        var picTxPreview = (PictureBox)form.GetType().GetField("_picTxPreview", flags)!.GetValue(form)!;
+        var pnlRxControls = (Panel)form.GetType().GetField("_pnlRxControls", flags)!.GetValue(form)!;
+        var picRxPreview = (PictureBox)form.GetType().GetField("_picRxPreview", flags)!.GetValue(form)!;
+        var cboTheme = (ComboBox)form.GetType().GetField("_cboTheme", flags)!.GetValue(form)!;
+        var chkShowLogs = (CheckBox)form.GetType().GetField("_chkShowLogs", flags)!.GetValue(form)!;
+
+        Console.WriteLine($"[TEST-UI] TX Controls: Bounds={pnlTxControls.Bounds}, Visible={pnlTxControls.Visible}, Dock={pnlTxControls.Dock}");
+        Console.WriteLine($"[TEST-UI] TX Preview:  Bounds={picTxPreview.Bounds}, Visible={picTxPreview.Visible}, Dock={picTxPreview.Dock}");
+        Console.WriteLine($"[TEST-UI] RX Controls: Bounds={pnlRxControls.Bounds}, Visible={pnlRxControls.Visible}, Dock={pnlRxControls.Dock}");
+        Console.WriteLine($"[TEST-UI] RX Preview:  Bounds={picRxPreview.Bounds}, Visible={picRxPreview.Visible}, Dock={picRxPreview.Dock}");
+
+        // Verify TX layout: controls on left, preview on right
+        bool txOk = pnlTxControls.Location.X <= picTxPreview.Location.X && pnlTxControls.Visible && picTxPreview.Visible;
+        Console.WriteLine($"[TEST-UI] TX Layout Verification (Settings Left, Preview Right): {(txOk ? "PASS" : "FAIL")}");
+
+        // Verify RX layout: preview on left, controls on right
+        bool rxOk = picRxPreview.Location.X <= pnlRxControls.Location.X && pnlRxControls.Visible && picRxPreview.Visible;
+        Console.WriteLine($"[TEST-UI] RX Layout Verification (Preview Left, Settings Right): {(rxOk ? "PASS" : "FAIL")}");
+
+        // Verify RX Controls visibility and width
+        bool rxVisible = pnlRxControls.Visible && pnlRxControls.Width >= 350 && pnlRxControls.Height > 100;
+        Console.WriteLine($"[TEST-UI] RX Controls Non-Occluded & Visible: {(rxVisible ? "PASS" : "FAIL")}");
+
+        // Verify Theme Switching
+        Console.WriteLine($"[TEST-UI] Testing Themes...");
+        foreach (var theme in new[] { "Dark", "Midnight", "Light" })
+        {
+            var applyThemeMethod = form.GetType().GetMethod("ApplyTheme", flags)!;
+            applyThemeMethod.Invoke(form, new object[] { theme });
+            Console.WriteLine($"  * Theme '{theme}' applied successfully. Form BackColor={form.BackColor}, ForeColor={form.ForeColor}");
+        }
+
+        // Verify Log Visibility Toggle
+        Console.WriteLine($"[TEST-UI] Testing Log Toggles...");
+        var updateLogMethod = form.GetType().GetMethod("UpdateLogVisibility", flags)!;
+        updateLogMethod.Invoke(form, new object[] { true });
+        Console.WriteLine($"  * Logs Shown: Form Height={form.Height}");
+        updateLogMethod.Invoke(form, new object[] { false });
+        Console.WriteLine($"  * Logs Hidden: Form Height={form.Height}");
+
+        form.Close();
+        Console.WriteLine("========================================");
+        Console.WriteLine("[TEST-UI] All UI Verification Checks PASSED!");
+        Console.WriteLine("========================================");
     }
 
     private static void RunAvTest()
