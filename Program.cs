@@ -98,7 +98,23 @@ internal static class Program
         updateLogMethod.Invoke(form, new object[] { true });
         Console.WriteLine($"  * Logs Shown: Form Height={form.Height}");
         updateLogMethod.Invoke(form, new object[] { false });
-        Console.WriteLine($"  * Logs Hidden: Form Height={form.Height}");
+        Application.DoEvents();
+        Console.WriteLine($"  * Logs Hidden: Form Height={form.Height}, ClientHeight={form.ClientSize.Height}");
+
+        var btnTxStart = (Button)form.GetType().GetField("_btnTxStart", flags)!.GetValue(form)!;
+        var btnRxStart = (Button)form.GetType().GetField("_btnRxStart", flags)!.GetValue(form)!;
+        var pnlTxSettings = (Panel)form.GetType().GetField("_pnlTxSettings", flags)!.GetValue(form)!;
+        var pnlRxSettings = (Panel)form.GetType().GetField("_pnlRxSettings", flags)!.GetValue(form)!;
+
+        int txButtonBottomInSettings = pnlTxControls.Location.Y + btnTxStart.Location.Y + btnTxStart.Height;
+        int rxButtonBottomInSettings = pnlRxControls.Location.Y + btnRxStart.Location.Y + btnRxStart.Height;
+
+        bool txButtonVisible = txButtonBottomInSettings <= pnlTxSettings.ClientSize.Height;
+        bool rxButtonVisible = rxButtonBottomInSettings <= pnlRxSettings.ClientSize.Height;
+
+        Console.WriteLine($"  * TX Start Button Bottom: {txButtonBottomInSettings}px vs Panel Height: {pnlTxSettings.ClientSize.Height}px -> {(txButtonVisible ? "FULLY VISIBLE" : "CLIPPED")}");
+        Console.WriteLine($"  * RX Start Button Bottom: {rxButtonBottomInSettings}px vs Panel Height: {pnlRxSettings.ClientSize.Height}px -> {(rxButtonVisible ? "FULLY VISIBLE" : "CLIPPED")}");
+        sb.AppendLine($"[TEST-UI] Button Visibility when Logs Hidden: TX={(txButtonVisible ? "PASS" : "FAIL")} ({txButtonBottomInSettings}/{pnlTxSettings.ClientSize.Height}), RX={(rxButtonVisible ? "PASS" : "FAIL")} ({rxButtonBottomInSettings}/{pnlRxSettings.ClientSize.Height})");
 
         try
         {

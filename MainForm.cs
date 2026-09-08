@@ -80,7 +80,7 @@ public sealed partial class MainForm : Form
     private Button _btnRxCopyLog = null!;
     private Button _btnRxClearLog = null!;
 
-    private int _heightWithLogs = 500;
+    private int _heightWithLogs = 720;
     private readonly object _logLock = new();
 
     public MainForm()
@@ -544,7 +544,7 @@ public sealed partial class MainForm : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        if (_chkShowLogs != null && _chkShowLogs.Checked && Height >= 480)
+        if (_chkShowLogs != null && _chkShowLogs.Checked && Height >= 680)
         {
             _heightWithLogs = Height;
         }
@@ -560,20 +560,25 @@ public sealed partial class MainForm : Form
         if (show)
         {
             _pnlTxSettings.Dock = DockStyle.Top;
-            _pnlTxSettings.Height = 438;
+            _pnlTxSettings.Height = 432;
             _pnlRxSettings.Dock = DockStyle.Top;
-            _pnlRxSettings.Height = 438;
+            _pnlRxSettings.Height = 432;
 
             MinimumSize = new Size(800, 680);
-            Height = Math.Max(Height, 720);
+            Height = Math.Max(_heightWithLogs, 720);
         }
         else
         {
-            MinimumSize = new Size(800, 500);
-            Height = 520;
+            if (Height >= 680)
+            {
+                _heightWithLogs = Height;
+            }
 
             _pnlTxSettings.Dock = DockStyle.Fill;
             _pnlRxSettings.Dock = DockStyle.Fill;
+
+            MinimumSize = new Size(800, 560);
+            ClientSize = new Size(ClientSize.Width, 524);
         }
     }
 
@@ -681,8 +686,8 @@ public sealed partial class MainForm : Form
     private void InitializeComponentCustom()
     {
         Text = "SRT Broadcast Suite — Native Blackmagic SDI Playout & NVENC Streaming";
-        Size = new Size(840, 520);
-        MinimumSize = new Size(800, 500);
+        ClientSize = new Size(840, 524);
+        MinimumSize = new Size(800, 560);
         AutoScaleMode = AutoScaleMode.None;
         BackColor = Color.FromArgb(20, 22, 26);
         ForeColor = Color.FromArgb(240, 243, 246);
@@ -803,7 +808,7 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 1,
-            Padding = new Padding(6, 4, 6, 6),
+            Padding = new Padding(6, 2, 6, 4),
             BackColor = Color.FromArgb(20, 22, 26)
         };
         _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
@@ -827,15 +832,15 @@ public sealed partial class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(28, 31, 38),
-            Padding = new Padding(6, 4, 6, 4),
+            Padding = new Padding(6, 2, 6, 4),
             Margin = new Padding(3)
         };
 
-        // Top Fixed Settings Area (Height 438px: Title 26 + Video 214 + Controls 194)
+        // Top Fixed Settings Area (Height 432px: Title 26 + Video 212 + Controls 184 + margins)
         _pnlTxSettings = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 438,
+            Height = 432,
             BackColor = Color.FromArgb(28, 31, 38)
         };
 
@@ -868,17 +873,17 @@ public sealed partial class MainForm : Form
         _picTxPreview = new PictureBox
         {
             Size = new Size(372, 210),
-            Location = new Point(4, 30),
+            Location = new Point(4, 28),
             BackColor = Color.Black,
             SizeMode = PictureBoxSizeMode.Zoom,
             BorderStyle = BorderStyle.FixedSingle
         };
 
-        // TX Controls Container (Below Video - Width 372, Height 192)
+        // TX Controls Container (Below Video - Width 372, Height 184)
         _pnlTxControls = new Panel
         {
-            Size = new Size(372, 192),
-            Location = new Point(4, 244),
+            Size = new Size(372, 184),
+            Location = new Point(4, 240),
             BackColor = Color.Transparent
         };
 
@@ -920,7 +925,7 @@ public sealed partial class MainForm : Form
         });
         _cboTxFormat.SelectedIndex = 0;
         _pnlTxControls.Controls.Add(_cboTxFormat);
-        y += 26;
+        y += 25;
 
         // Row 2: DeckLink Card & Input Port
         _pnlTxControls.Controls.Add(CreateFieldLabel("Card:", 0, y + 2));
@@ -948,7 +953,7 @@ public sealed partial class MainForm : Form
         _cboTxVideoInput.Items.AddRange(new object[] { "sdi", "hdmi", "optical_sdi", "component", "composite" });
         _cboTxVideoInput.SelectedIndex = 0;
         _pnlTxControls.Controls.Add(_cboTxVideoInput);
-        y += 26;
+        y += 25;
 
         // Row 3: Video File & Browse & Loop
         _pnlTxControls.Controls.Add(CreateFieldLabel("File:", 0, y + 2));
@@ -991,7 +996,7 @@ public sealed partial class MainForm : Form
             Checked = true
         };
         _pnlTxControls.Controls.AddRange(new Control[] { _txtTxFilePath, _btnTxBrowse, _chkTxLoop });
-        y += 26;
+        y += 25;
 
         // Row 4: Encoder & Bitrate
         _pnlTxControls.Controls.Add(CreateFieldLabel("Encoder:", 0, y + 2));
@@ -1018,7 +1023,7 @@ public sealed partial class MainForm : Form
             Text = "6000k"
         };
         _pnlTxControls.Controls.Add(_txtTxBitrate);
-        y += 26;
+        y += 25;
 
         // Row 5: SRT Connection Mode & Host/Port
         _pnlTxControls.Controls.Add(CreateFieldLabel("Mode:", 0, y + 2));
@@ -1055,7 +1060,7 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlTxControls.Controls.AddRange(new Control[] { _txtTxHost, _numTxPort });
-        y += 26;
+        y += 25;
 
         // Row 6: Latency & Key & StreamID
         _pnlTxControls.Controls.Add(CreateFieldLabel("Latency:", 0, y + 2));
@@ -1091,7 +1096,7 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlTxControls.Controls.Add(_txtTxStreamId);
-        y += 28;
+        y += 26;
 
         // Row 7: Action Buttons & Stats
         _btnTxStart = new Button
@@ -1249,15 +1254,15 @@ public sealed partial class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(28, 31, 38),
-            Padding = new Padding(6, 4, 6, 4),
+            Padding = new Padding(6, 2, 6, 4),
             Margin = new Padding(3)
         };
 
-        // Top Fixed Settings Area (Height 438px: Title 26 + Video 214 + Controls 194)
+        // Top Fixed Settings Area (Height 432px: Title 26 + Video 212 + Controls 184 + margins)
         _pnlRxSettings = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 438,
+            Height = 432,
             BackColor = Color.FromArgb(28, 31, 38)
         };
 
@@ -1290,17 +1295,17 @@ public sealed partial class MainForm : Form
         _picRxPreview = new PictureBox
         {
             Size = new Size(372, 210),
-            Location = new Point(4, 30),
+            Location = new Point(4, 28),
             BackColor = Color.Black,
             SizeMode = PictureBoxSizeMode.Zoom,
             BorderStyle = BorderStyle.FixedSingle
         };
 
-        // RX Controls Container (Below Video - Width 372, Height 192)
+        // RX Controls Container (Below Video - Width 372, Height 184)
         _pnlRxControls = new Panel
         {
-            Size = new Size(372, 192),
-            Location = new Point(4, 244),
+            Size = new Size(372, 184),
+            Location = new Point(4, 240),
             BackColor = Color.Transparent
         };
 
@@ -1332,7 +1337,7 @@ public sealed partial class MainForm : Form
         };
         _pnlRxControls.Controls.Add(_numRxAudioDelay);
         _pnlRxControls.Controls.Add(CreateFieldLabel("ms", 280, y + 2));
-        y += 26;
+        y += 25;
 
         // Row 2: DeckLink Card & SDI Standard
         _pnlRxControls.Controls.Add(CreateFieldLabel("Card:", 0, y + 2));
@@ -1369,7 +1374,7 @@ public sealed partial class MainForm : Form
         });
         _cboRxFormat.SelectedIndex = 0;
         _pnlRxControls.Controls.Add(_cboRxFormat);
-        y += 26;
+        y += 25;
 
         // Row 3: SRT Connection Mode & Host/Port
         _pnlRxControls.Controls.Add(CreateFieldLabel("Mode:", 0, y + 2));
@@ -1406,7 +1411,7 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlRxControls.Controls.AddRange(new Control[] { _txtRxHost, _numRxPort });
-        y += 26;
+        y += 25;
 
         // Row 4: Latency & Key & StreamID
         _pnlRxControls.Controls.Add(CreateFieldLabel("Latency:", 0, y + 2));
@@ -1442,7 +1447,7 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlRxControls.Controls.Add(_txtRxStreamId);
-        y = 160; // Aligned with TX Row 7
+        y = 153; // Aligned with TX Row 7
 
         // Row 5: Action Buttons & Stats
         _btnRxStart = new Button
