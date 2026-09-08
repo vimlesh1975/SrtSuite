@@ -4,7 +4,7 @@
 ![Framework](https://img.shields.io/badge/.NET-10.0--windows-purple)
 ![Hardware](https://img.shields.io/badge/hardware-Blackmagic%20DeckLink-black)
 ![Protocol](https://img.shields.io/badge/protocol-SRT%20(libsrt)-green)
-![Encoding](https://img.shields.io/badge/encoder-NVIDIA%20NVENC-76B900)
+![Encoding](https://img.shields.io/badge/encoder-CPU%20(libx264)%20%7C%20NVENC-76B900)
 
 **SRT Broadcast Suite** is a high-performance native C# desktop application built on **.NET 10 Windows Forms (x64)** for professional broadcast contribution, playout, and contribution monitoring. It provides synchronous **Blackmagic DeckLink SDI hardware input and output (1080i50 native)** with ultra-low latency **Secure Reliable Transport (SRT)** transmission.
 
@@ -28,9 +28,9 @@
   - **Left Panel (TX)**: Live in-app 16:9 video preview placed directly above transmitter settings.
   - **Right Panel (RX)**: Live in-app 16:9 video preview placed directly above receiver settings.
   - Native aspect ratio scaling with zero vertical letterbox borders.
-- **Hardware-Accelerated Encoding (NVIDIA NVENC)**:
-  - Zero-latency GPU encoding via `h264_nvenc` with low-latency tuning, fixed GOP (`-g 25 -bf 0`), and configurable bitrate.
-  - CPU fallback (`libx264` veryfast/zerolatency) for systems without NVIDIA GPUs.
+- **CPU & GPU Encoding (CPU libx264 Default, NVENC GPU)**:
+  - Universal CPU encoding (`libx264` veryfast / zerolatency) set as default for instant out-of-the-box compatibility on all PCs.
+  - Zero-latency GPU hardware encoding (`h264_nvenc`) with low-latency tuning, fixed GOP (`-g 25 -bf 0`), and configurable bitrate for NVIDIA systems.
 - **Multi-Source Transmitter (TX)**:
   - **DeckLink SDI Input**: Live SDI capture directly from cards (defaults to `DeckLink SDI 4K` or `DeckLink Duo`).
   - **Video File**: File streaming (`.mp4`, `.mkv`, `.ts`, `.mov`, `.avi`) with seamless looping.
@@ -166,7 +166,7 @@ User configurations are automatically persisted to `appsettings.json` in the app
   "TxDevice": "DeckLink SDI 4K",
   "TxVideoInput": "sdi",
   "TxFormat": "Hi50 (1080i50 - Default)",
-  "TxEncoder": "h264_nvenc (NVIDIA GPU)",
+  "TxEncoder": "libx264 (CPU)",
   "TxBitrate": "6000k",
   "TxFilePath": "sample_video.mp4",
   "TxLoop": true,

@@ -8,11 +8,11 @@ public sealed class AppSettings
     public string TxDevice { get; set; } = "DeckLink SDI 4K";
     public string TxVideoInput { get; set; } = "sdi";
     public string TxFormat { get; set; } = "Hi50 (1080i50 - Default)";
-    public string TxEncoder { get; set; } = "h264_nvenc (NVIDIA GPU)";
+    public string TxEncoder { get; set; } = "libx264 (CPU)";
     public string TxBitrate { get; set; } = "6000k";
     public string TxFilePath { get; set; } = "sample_video.mp4";
     public bool TxLoop { get; set; } = true;
-    public string TxMode { get; set; } = "Caller (Send to remote)";
+    public string TxMode { get; set; } = "Caller";
     public string TxHost { get; set; } = "127.0.0.1";
     public int TxPort { get; set; } = 5000;
     public int TxLatency { get; set; } = 120;
@@ -22,7 +22,7 @@ public sealed class AppSettings
     public bool RxEnableDeckLink { get; set; } = true;
     public string RxDevice { get; set; } = "DeckLink Duo (1)";
     public string RxFormat { get; set; } = "Hi50 (1080i50 - Default)";
-    public string RxMode { get; set; } = "Listener (Listen for incoming)";
+    public string RxMode { get; set; } = "Listener";
     public string RxHost { get; set; } = "0.0.0.0";
     public int RxPort { get; set; } = 5000;
     public int RxLatency { get; set; } = 120;

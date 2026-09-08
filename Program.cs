@@ -41,18 +41,20 @@ internal static class Program
         Console.WriteLine("[TEST-UI] Starting UI Layout & Theme Verification");
         Console.WriteLine("========================================");
 
-        ApplicationConfiguration.Initialize();
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-
-        using var form = new MainForm();
-        form.CreateControl();
-        form.Show();
-        Application.DoEvents();
-
         var sb = new StringBuilder();
-        sb.AppendLine($"[TEST-UI] Form Size: {form.Size.Width}x{form.Size.Height}");
+        try
+        {
+            ApplicationConfiguration.Initialize();
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            using var form = new MainForm();
+            form.CreateControl();
+            form.Show();
+            Application.DoEvents();
+
+            sb.AppendLine($"[TEST-UI] Form Size: {form.Size.Width}x{form.Size.Height}");
 
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var pnlHeader = (Panel)form.GetType().GetField("_pnlHeader", flags)!.GetValue(form)!;
@@ -129,15 +131,26 @@ internal static class Program
             form.DrawToBitmap(bmpLight, new Rectangle(0, 0, form.Width, form.Height));
             bmpLight.Save(@"d:\_projects\SrtSuite\ui_light.png", ImageFormat.Png);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"[TEST-UI] Bitmap capture error: {ex.Message}");
+        }
 
-        form.Close();
-        sb.AppendLine("========================================");
-        sb.AppendLine("[TEST-UI] All UI Verification Checks PASSED!");
-        sb.AppendLine("========================================");
-        var outPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_ui.log");
-        File.WriteAllText(outPath, sb.ToString());
-        File.WriteAllText(@"d:\_projects\SrtSuite\test_ui.log", sb.ToString());
+            form.Close();
+            sb.AppendLine("========================================");
+            sb.AppendLine("[TEST-UI] All UI Verification Checks PASSED!");
+            sb.AppendLine("========================================");
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"[TEST-UI] Exception: {ex}");
+        }
+        finally
+        {
+            var outPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_ui.log");
+            File.WriteAllText(outPath, sb.ToString());
+            File.WriteAllText(@"d:\_projects\SrtSuite\test_ui.log", sb.ToString());
+        }
     }
 
     private static void RunAvTest()

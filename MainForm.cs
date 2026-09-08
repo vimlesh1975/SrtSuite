@@ -487,7 +487,7 @@ public sealed partial class MainForm : Form
             DeckLinkDevice: _cboTxDevice.SelectedItem?.ToString() ?? "DeckLink Duo (1)",
             FormatCode: formatCode,
             VideoInput: _cboTxVideoInput.SelectedItem?.ToString() ?? "sdi",
-            Encoder: _cboTxEncoder.SelectedIndex == 0 ? "h264_nvenc" : "libx264",
+            Encoder: _cboTxEncoder.SelectedItem?.ToString()?.Contains("nvenc", StringComparison.OrdinalIgnoreCase) == true ? "h264_nvenc" : "libx264",
             Bitrate: _txtTxBitrate.Text.Trim(),
             FilePath: _txtTxFilePath.Text.Trim(),
             Loop: _chkTxLoop.Checked,
@@ -560,11 +560,11 @@ public sealed partial class MainForm : Form
         if (show)
         {
             _pnlTxSettings.Dock = DockStyle.Top;
-            _pnlTxSettings.Height = 432;
+            _pnlTxSettings.Height = 440;
             _pnlRxSettings.Dock = DockStyle.Top;
-            _pnlRxSettings.Height = 432;
+            _pnlRxSettings.Height = 440;
 
-            MinimumSize = new Size(800, 680);
+            MinimumSize = new Size(980, 680);
             Height = Math.Max(_heightWithLogs, 720);
         }
         else
@@ -577,8 +577,8 @@ public sealed partial class MainForm : Form
             _pnlTxSettings.Dock = DockStyle.Fill;
             _pnlRxSettings.Dock = DockStyle.Fill;
 
-            MinimumSize = new Size(800, 560);
-            ClientSize = new Size(ClientSize.Width, 524);
+            MinimumSize = new Size(980, 520);
+            ClientSize = new Size(ClientSize.Width, 495);
         }
     }
 
@@ -686,8 +686,8 @@ public sealed partial class MainForm : Form
     private void InitializeComponentCustom()
     {
         Text = "SRT Broadcast Suite — Native Blackmagic SDI Playout & NVENC Streaming";
-        ClientSize = new Size(840, 524);
-        MinimumSize = new Size(800, 560);
+        ClientSize = new Size(1020, 495);
+        MinimumSize = new Size(980, 520);
         AutoScaleMode = AutoScaleMode.None;
         BackColor = Color.FromArgb(20, 22, 26);
         ForeColor = Color.FromArgb(240, 243, 246);
@@ -836,11 +836,11 @@ public sealed partial class MainForm : Form
             Margin = new Padding(3)
         };
 
-        // Top Fixed Settings Area (Height 432px: Title 26 + Video 212 + Controls 184 + margins)
+        // Top Fixed Settings Area (Height 440px: Title 26 + Video 218 + Controls 184 + margins)
         _pnlTxSettings = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 432,
+            Height = 440,
             BackColor = Color.FromArgb(28, 31, 38)
         };
 
@@ -865,25 +865,25 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(156, 163, 175),
             AutoSize = true,
-            Location = new Point(280, 5)
+            Location = new Point(295, 5)
         };
         pnlTitle.Controls.AddRange(new Control[] { _lblTxTitle, _lblTxStatusBadge });
 
-        // Video Preview Monitor (Above Settings - 372 x 210)
+        // Video Preview Monitor (Above Settings - 384 x 216 exact 16:9)
         _picTxPreview = new PictureBox
         {
-            Size = new Size(372, 210),
-            Location = new Point(4, 28),
+            Size = new Size(384, 216),
+            Location = new Point(26, 28),
             BackColor = Color.Black,
             SizeMode = PictureBoxSizeMode.Zoom,
             BorderStyle = BorderStyle.FixedSingle
         };
 
-        // TX Controls Container (Below Video - Width 372, Height 184)
+        // TX Controls Container (Below Video - Width 436, Height 184)
         _pnlTxControls = new Panel
         {
-            Size = new Size(372, 184),
-            Location = new Point(4, 240),
+            Size = new Size(436, 184),
+            Location = new Point(0, 248),
             BackColor = Color.Transparent
         };
 
@@ -895,7 +895,7 @@ public sealed partial class MainForm : Form
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
             Location = new Point(54, y),
-            Width = 138,
+            Width = 150,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -903,13 +903,13 @@ public sealed partial class MainForm : Form
         _cboTxSource.SelectedIndex = 0;
         _pnlTxControls.Controls.Add(_cboTxSource);
 
-        _pnlTxControls.Controls.Add(CreateFieldLabel("Standard:", 198, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("Standard:", 212, y + 2));
         _cboTxFormat = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
-            Location = new Point(260, y),
-            Width = 102,
+            Location = new Point(276, y),
+            Width = 158,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -934,19 +934,19 @@ public sealed partial class MainForm : Form
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
             Location = new Point(54, y),
-            Width = 138,
+            Width = 150,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
         _pnlTxControls.Controls.Add(_cboTxDevice);
 
-        _pnlTxControls.Controls.Add(CreateFieldLabel("Input:", 198, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("Input:", 212, y + 2));
         _cboTxVideoInput = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
-            Location = new Point(260, y),
-            Width = 102,
+            Location = new Point(276, y),
+            Width = 158,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -960,16 +960,16 @@ public sealed partial class MainForm : Form
         _txtTxFilePath = new TextBox
         {
             Location = new Point(54, y),
-            Width = 146,
+            Width = 150,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White,
             Text = @"sample_video.mp4"
         };
         _btnTxBrowse = new Button
         {
-            Text = "Browse...",
-            Location = new Point(204, y - 1),
-            Width = 54,
+            Text = "Browse",
+            Location = new Point(212, y - 1),
+            Width = 58,
             Height = 24,
             BackColor = Color.FromArgb(44, 49, 60),
             ForeColor = Color.White,
@@ -989,7 +989,7 @@ public sealed partial class MainForm : Form
         _chkTxLoop = new CheckBox
         {
             Text = "Loop",
-            Location = new Point(264, y + 1),
+            Location = new Point(276, y + 1),
             Width = 60,
             AutoSize = true,
             ForeColor = Color.FromArgb(209, 213, 219),
@@ -1005,19 +1005,19 @@ public sealed partial class MainForm : Form
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
             Location = new Point(54, y),
-            Width = 138,
+            Width = 150,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
-        _cboTxEncoder.Items.AddRange(new object[] { "h264_nvenc (NVIDIA)", "libx264 (CPU)" });
+        _cboTxEncoder.Items.AddRange(new object[] { "libx264 (CPU)", "h264_nvenc (NVIDIA)" });
         _cboTxEncoder.SelectedIndex = 0;
         _pnlTxControls.Controls.Add(_cboTxEncoder);
 
-        _pnlTxControls.Controls.Add(CreateFieldLabel("Bitrate:", 198, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("Bitrate:", 212, y + 2));
         _txtTxBitrate = new TextBox
         {
-            Location = new Point(260, y),
-            Width = 102,
+            Location = new Point(276, y),
+            Width = 158,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White,
             Text = "6000k"
@@ -1025,14 +1025,14 @@ public sealed partial class MainForm : Form
         _pnlTxControls.Controls.Add(_txtTxBitrate);
         y += 25;
 
-        // Row 5: SRT Connection Mode & Host/Port
+        // Row 5: SRT Connection Mode & Host/Port (Aligned columns: Mode 150px, Host 98px, Port 56px)
         _pnlTxControls.Controls.Add(CreateFieldLabel("Mode:", 0, y + 2));
         _cboTxMode = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
             Location = new Point(54, y),
-            Width = 138,
+            Width = 150,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -1040,19 +1040,19 @@ public sealed partial class MainForm : Form
         _cboTxMode.SelectedIndex = 0;
         _pnlTxControls.Controls.Add(_cboTxMode);
 
-        _pnlTxControls.Controls.Add(CreateFieldLabel("Host:Port:", 198, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("Host:Port:", 212, y + 2));
         _txtTxHost = new TextBox
         {
-            Location = new Point(260, y),
-            Width = 50,
+            Location = new Point(276, y),
+            Width = 98,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White,
             Text = "127.0.0.1"
         };
         _numTxPort = new NumericUpDown
         {
-            Location = new Point(312, y),
-            Width = 50,
+            Location = new Point(378, y),
+            Width = 56,
             Minimum = 1024,
             Maximum = 65535,
             Value = 5000,
@@ -1066,8 +1066,8 @@ public sealed partial class MainForm : Form
         _pnlTxControls.Controls.Add(CreateFieldLabel("Latency:", 0, y + 2));
         _numTxLatency = new NumericUpDown
         {
-            Location = new Point(46, y),
-            Width = 44,
+            Location = new Point(48, y),
+            Width = 46,
             Minimum = 20,
             Maximum = 5000,
             Value = 120,
@@ -1075,23 +1075,23 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlTxControls.Controls.Add(_numTxLatency);
-        _pnlTxControls.Controls.Add(CreateFieldLabel("ms", 92, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("ms", 96, y + 2));
 
-        _pnlTxControls.Controls.Add(CreateFieldLabel("Key:", 116, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("Key:", 122, y + 2));
         _txtTxPassphrase = new TextBox
         {
-            Location = new Point(144, y),
-            Width = 58,
+            Location = new Point(150, y),
+            Width = 54,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
         _pnlTxControls.Controls.Add(_txtTxPassphrase);
 
-        _pnlTxControls.Controls.Add(CreateFieldLabel("ID:", 208, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("ID:", 212, y + 2));
         _txtTxStreamId = new TextBox
         {
-            Location = new Point(232, y),
-            Width = 130,
+            Location = new Point(276, y),
+            Width = 158,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -1136,7 +1136,7 @@ public sealed partial class MainForm : Form
             Font = new Font("Consolas", 7.5f),
             ForeColor = Color.FromArgb(110, 231, 183),
             AutoSize = true,
-            Location = new Point(140, y + 5)
+            Location = new Point(142, y + 5)
         };
 
         _pnlTxControls.Controls.AddRange(new Control[] { _btnTxStart, _btnTxStop, _lblTxStats });
@@ -1147,10 +1147,11 @@ public sealed partial class MainForm : Form
 
         _pnlTxSettings.Resize += (_, _) =>
         {
-            int offsetX = Math.Max(4, (_pnlTxSettings.ClientSize.Width - 372) / 2);
-            _picTxPreview.Left = offsetX;
-            _pnlTxControls.Left = offsetX;
-            _lblTxStatusBadge.Left = Math.Max(220, _pnlTxSettings.ClientSize.Width - _lblTxStatusBadge.Width - 8);
+            int previewOffsetX = Math.Max(4, (_pnlTxSettings.ClientSize.Width - _picTxPreview.Width) / 2);
+            int controlsOffsetX = Math.Max(4, (_pnlTxSettings.ClientSize.Width - _pnlTxControls.Width) / 2);
+            _picTxPreview.Left = previewOffsetX;
+            _pnlTxControls.Left = controlsOffsetX;
+            _lblTxStatusBadge.Left = Math.Max(295, _lblTxTitle.Right + 14);
         };
 
         // Log Console Area - Container docked Fill
@@ -1258,11 +1259,11 @@ public sealed partial class MainForm : Form
             Margin = new Padding(3)
         };
 
-        // Top Fixed Settings Area (Height 432px: Title 26 + Video 212 + Controls 184 + margins)
+        // Top Fixed Settings Area (Height 440px: Title 26 + Video 218 + Controls 184 + margins)
         _pnlRxSettings = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 432,
+            Height = 440,
             BackColor = Color.FromArgb(28, 31, 38)
         };
 
@@ -1287,25 +1288,25 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(156, 163, 175),
             AutoSize = true,
-            Location = new Point(275, 5)
+            Location = new Point(295, 5)
         };
         pnlTitle.Controls.AddRange(new Control[] { _lblRxTitle, _lblRxStatusBadge });
 
-        // Video Preview Monitor (Above Settings - 372 x 210)
+        // Video Preview Monitor (Above Settings - 384 x 216 exact 16:9)
         _picRxPreview = new PictureBox
         {
-            Size = new Size(372, 210),
-            Location = new Point(4, 28),
+            Size = new Size(384, 216),
+            Location = new Point(26, 28),
             BackColor = Color.Black,
             SizeMode = PictureBoxSizeMode.Zoom,
             BorderStyle = BorderStyle.FixedSingle
         };
 
-        // RX Controls Container (Below Video - Width 372, Height 184)
+        // RX Controls Container (Below Video - Width 436, Height 184)
         _pnlRxControls = new Panel
         {
-            Size = new Size(372, 184),
-            Location = new Point(4, 240),
+            Size = new Size(436, 184),
+            Location = new Point(0, 248),
             BackColor = Color.Transparent
         };
 
@@ -1315,7 +1316,7 @@ public sealed partial class MainForm : Form
         {
             Text = "DeckLink SDI Playout",
             Location = new Point(0, y + 1),
-            Width = 175,
+            Width = 180,
             AutoSize = true,
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(147, 197, 253),
@@ -1323,11 +1324,11 @@ public sealed partial class MainForm : Form
         };
         _pnlRxControls.Controls.Add(_chkRxEnableDeckLink);
 
-        _pnlRxControls.Controls.Add(CreateFieldLabel("Sync:", 184, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("Sync:", 212, y + 2));
         _numRxAudioDelay = new NumericUpDown
         {
-            Location = new Point(220, y),
-            Width = 56,
+            Location = new Point(276, y),
+            Width = 60,
             Minimum = -1000,
             Maximum = 1000,
             Value = 0,
@@ -1336,7 +1337,7 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlRxControls.Controls.Add(_numRxAudioDelay);
-        _pnlRxControls.Controls.Add(CreateFieldLabel("ms", 280, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("ms", 340, y + 2));
         y += 25;
 
         // Row 2: DeckLink Card & SDI Standard
@@ -1346,19 +1347,19 @@ public sealed partial class MainForm : Form
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
             Location = new Point(54, y),
-            Width = 138,
+            Width = 150,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
         _pnlRxControls.Controls.Add(_cboRxDevice);
 
-        _pnlRxControls.Controls.Add(CreateFieldLabel("Standard:", 198, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("Standard:", 212, y + 2));
         _cboRxFormat = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
-            Location = new Point(260, y),
-            Width = 102,
+            Location = new Point(276, y),
+            Width = 158,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -1376,14 +1377,14 @@ public sealed partial class MainForm : Form
         _pnlRxControls.Controls.Add(_cboRxFormat);
         y += 25;
 
-        // Row 3: SRT Connection Mode & Host/Port
+        // Row 3: SRT Connection Mode & Host/Port (Aligned columns: Mode 150px, Host 98px, Port 56px)
         _pnlRxControls.Controls.Add(CreateFieldLabel("Mode:", 0, y + 2));
         _cboRxMode = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
             FlatStyle = FlatStyle.Flat,
             Location = new Point(54, y),
-            Width = 138,
+            Width = 150,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -1391,19 +1392,19 @@ public sealed partial class MainForm : Form
         _cboRxMode.SelectedIndex = 0;
         _pnlRxControls.Controls.Add(_cboRxMode);
 
-        _pnlRxControls.Controls.Add(CreateFieldLabel("Host:Port:", 198, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("Host:Port:", 212, y + 2));
         _txtRxHost = new TextBox
         {
-            Location = new Point(260, y),
-            Width = 50,
+            Location = new Point(276, y),
+            Width = 98,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White,
             Text = "0.0.0.0"
         };
         _numRxPort = new NumericUpDown
         {
-            Location = new Point(312, y),
-            Width = 50,
+            Location = new Point(378, y),
+            Width = 56,
             Minimum = 1024,
             Maximum = 65535,
             Value = 5000,
@@ -1417,8 +1418,8 @@ public sealed partial class MainForm : Form
         _pnlRxControls.Controls.Add(CreateFieldLabel("Latency:", 0, y + 2));
         _numRxLatency = new NumericUpDown
         {
-            Location = new Point(46, y),
-            Width = 44,
+            Location = new Point(48, y),
+            Width = 46,
             Minimum = 20,
             Maximum = 5000,
             Value = 120,
@@ -1426,23 +1427,23 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlRxControls.Controls.Add(_numRxLatency);
-        _pnlRxControls.Controls.Add(CreateFieldLabel("ms", 92, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("ms", 96, y + 2));
 
-        _pnlRxControls.Controls.Add(CreateFieldLabel("Key:", 116, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("Key:", 122, y + 2));
         _txtRxPassphrase = new TextBox
         {
-            Location = new Point(144, y),
-            Width = 58,
+            Location = new Point(150, y),
+            Width = 54,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
         _pnlRxControls.Controls.Add(_txtRxPassphrase);
 
-        _pnlRxControls.Controls.Add(CreateFieldLabel("ID:", 208, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("ID:", 212, y + 2));
         _txtRxStreamId = new TextBox
         {
-            Location = new Point(232, y),
-            Width = 130,
+            Location = new Point(276, y),
+            Width = 158,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -1487,7 +1488,7 @@ public sealed partial class MainForm : Form
             Font = new Font("Consolas", 7.5f),
             ForeColor = Color.FromArgb(147, 197, 253),
             AutoSize = true,
-            Location = new Point(140, y + 5)
+            Location = new Point(142, y + 5)
         };
 
         _pnlRxControls.Controls.AddRange(new Control[] { _btnRxStart, _btnRxStop, _lblRxStats });
@@ -1498,10 +1499,11 @@ public sealed partial class MainForm : Form
 
         _pnlRxSettings.Resize += (_, _) =>
         {
-            int offsetX = Math.Max(4, (_pnlRxSettings.ClientSize.Width - 372) / 2);
-            _picRxPreview.Left = offsetX;
-            _pnlRxControls.Left = offsetX;
-            _lblRxStatusBadge.Left = Math.Max(220, _pnlRxSettings.ClientSize.Width - _lblRxStatusBadge.Width - 8);
+            int previewOffsetX = Math.Max(4, (_pnlRxSettings.ClientSize.Width - _picRxPreview.Width) / 2);
+            int controlsOffsetX = Math.Max(4, (_pnlRxSettings.ClientSize.Width - _pnlRxControls.Width) / 2);
+            _picRxPreview.Left = previewOffsetX;
+            _pnlRxControls.Left = controlsOffsetX;
+            _lblRxStatusBadge.Left = Math.Max(295, _lblRxTitle.Right + 14);
         };
 
         // Log Console Area - Container docked Fill
