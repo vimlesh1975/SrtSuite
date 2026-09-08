@@ -11,14 +11,14 @@ public sealed partial class SrtReceiverEngine : IDisposable
 {
     private readonly string _ffmpegPath;
     private readonly string _logFilePath;
-    private Process? _process;
+    private Process? _currentProcess;
     private CancellationTokenSource? _cts;
-    private Thread? _videoPumpThread;
-    private Thread? _audioPumpThread;
+    private Thread? _supervisorThread;
     private TcpListener? _audioListener;
     private DeckLinkOutputEngine? _deckLinkEngine;
     private readonly AudioFifo _audioFifo = new();
     private volatile int _audioDelayMs;
+    private volatile bool _isRunning;
 
     public int AudioDelayMs
     {
@@ -31,7 +31,7 @@ public sealed partial class SrtReceiverEngine : IDisposable
     public event Action<bool>? OnStatusChanged;
     public event Action<Bitmap>? OnPreviewFrame;
 
-    public bool IsReceiving => _process is not null && !_process.HasExited;
+    public bool IsReceiving => _isRunning;
 
     public SrtReceiverEngine(string ffmpegPath)
     {
@@ -55,7 +55,7 @@ public sealed partial class SrtReceiverEngine : IDisposable
     public string BuildSrtUrl(RxSettings settings)
     {
         var host = string.IsNullOrWhiteSpace(settings.Host) ? "0.0.0.0" : settings.Host.Trim();
-        var port = settings.Port <= 0 ? 9998 : settings.Port;
+        var port = settings.Port <= 0 ? 5000 : settings.Port;
         var mode = settings.Mode == SrtMode.Listener ? "listener" : "caller";
         var query = new List<string>
         {
@@ -65,8 +65,14 @@ public sealed partial class SrtReceiverEngine : IDisposable
             "transtype=live",
             "rcvbuf=67108864",
             "sndbuf=67108864",
-            "tlpktdrop=1"
+            "tlpktdrop=1",
+            "linger=0"
         };
+
+        if (mode == "caller")
+        {
+            query.Add("connect_timeout=10000");
+        }
 
         if (!string.IsNullOrWhiteSpace(settings.Passphrase))
             query.Add($"passphrase={Uri.EscapeDataString(settings.Passphrase.Trim())}");
@@ -79,22 +85,135 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
     public bool Start(RxSettings settings)
     {
-        if (IsReceiving)
+        if (_isRunning)
         {
             Log("[RX ERROR] Receiver is already active.\n");
             return false;
         }
 
+        _isRunning = true;
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
 
-        // 1. Setup local TCP loopback for low-latency 48kHz 32-bit PCM audio
+        _supervisorThread = new Thread(() => SupervisorLoop(settings, token))
+        {
+            Name = "RxSupervisor",
+            IsBackground = true
+        };
+        _supervisorThread.SetApartmentState(ApartmentState.MTA);
+        _supervisorThread.Start();
+
+        OnStatusChanged?.Invoke(true);
+        return true;
+    }
+
+    public void Stop()
+    {
+        if (!_isRunning && _cts == null) return;
+
+        _isRunning = false;
+        _cts?.Cancel();
+
+        if (_currentProcess is not null && !_currentProcess.HasExited)
+        {
+            try
+            {
+                _currentProcess.Kill(true);
+            }
+            catch { }
+            _currentProcess = null;
+        }
+
+        try { _audioListener?.Stop(); } catch { }
+        _audioListener = null;
+
+        _supervisorThread?.Join(1500);
+        _supervisorThread = null;
+
+        _deckLinkEngine?.Dispose();
+        _deckLinkEngine = null;
+
+        _audioFifo.Clear();
+
+        OnStatusChanged?.Invoke(false);
+    }
+
+    private void SupervisorLoop(RxSettings settings, CancellationToken token)
+    {
+        int width = 1920;
+        int height = 1080;
+        double frameRate = 25.0;
+        var format = string.IsNullOrWhiteSpace(settings.FormatCode) ? "Hi50" : settings.FormatCode;
+        DeckLinkInterop.ResolveDisplayMode(format, out width, out height, out frameRate);
+
+        // 1. Initialize DeckLink SDI Output ONCE so sync is preserved across caller connects/disconnects
+        if (settings.EnableDeckLinkPlayout && !string.IsNullOrWhiteSpace(settings.DeckLinkDevice))
+        {
+            try
+            {
+                _deckLinkEngine = new DeckLinkOutputEngine();
+                _deckLinkEngine.Initialize(settings.DeckLinkDevice, format, enableAudio: true);
+                Log($"[DECKLINK] Initialized SDI Output: {settings.DeckLinkDevice} ({format} {width}x{height} @ {frameRate:F2}fps)\n");
+                Log("[DECKLINK] Standby sync active on SDI out\n");
+            }
+            catch (Exception ex)
+            {
+                Log($"[DECKLINK ERROR] Failed to initialize {settings.DeckLinkDevice}: {ex.Message}\n");
+                _deckLinkEngine?.Dispose();
+                _deckLinkEngine = null;
+            }
+        }
+
+        int sessionIndex = 0;
+        while (!token.IsCancellationRequested && _isRunning)
+        {
+            sessionIndex++;
+            if (sessionIndex > 1)
+            {
+                if (settings.Mode == SrtMode.Listener)
+                {
+                    Log($"[RX LISTENER] Caller disconnected. Persistent listening active on port {(settings.Port <= 0 ? 5000 : settings.Port)}. Awaiting next connection...\n");
+                    OnStats?.Invoke(new StreamStats(null, null, null, "Listening (waiting for caller)..."));
+                }
+                else
+                {
+                    Log($"[RX CALLER] Connection lost. Persistent mode active: reconnecting to {settings.Host}:{(settings.Port <= 0 ? 5000 : settings.Port)}...\n");
+                    OnStats?.Invoke(new StreamStats(null, null, null, "Reconnecting..."));
+                }
+            }
+
+            RunReceiveSession(settings, width, height, frameRate, token);
+
+            if (token.IsCancellationRequested || !_isRunning)
+            {
+                break;
+            }
+
+            try
+            {
+                Thread.Sleep(500);
+            }
+            catch { }
+        }
+
+        _deckLinkEngine?.Dispose();
+        _deckLinkEngine = null;
+        Log("[DECKLINK] SDI Output closed.\n");
+
+        _isRunning = false;
+        OnStatusChanged?.Invoke(false);
+    }
+
+    private void RunReceiveSession(RxSettings settings, int width, int height, double frameRate, CancellationToken token)
+    {
         int audioPort = 0;
+        TcpListener? audioListener = null;
         try
         {
-            _audioListener = new TcpListener(IPAddress.Loopback, 0);
-            _audioListener.Start();
-            audioPort = ((IPEndPoint)_audioListener.LocalEndpoint).Port;
+            audioListener = new TcpListener(IPAddress.Loopback, 0);
+            audioListener.Start();
+            audioPort = ((IPEndPoint)audioListener.LocalEndpoint).Port;
+            _audioListener = audioListener;
         }
         catch (Exception ex)
         {
@@ -102,18 +221,18 @@ public sealed partial class SrtReceiverEngine : IDisposable
             _audioListener = null;
         }
 
-        // 2. Prepare FFmpeg decode arguments
-        DeckLinkInterop.ResolveDisplayMode(settings.FormatCode, out int targetW, out int targetH, out double targetFps);
         var srtUrl = BuildSrtUrl(settings);
         var args = new List<string>
         {
             "-hide_banner",
             "-fflags", "nobuffer",
             "-flags", "low_delay",
+            "-probesize", "500000",
+            "-analyzeduration", "1000000",
             "-thread_queue_size", "4096",
             "-i", srtUrl,
             "-map", "0:v:0",
-            "-vf", $"setpts=PTS-STARTPTS,scale={targetW}:{targetH}:force_original_aspect_ratio=decrease,pad={targetW}:{targetH}:(ow-iw)/2:(oh-ih)/2,format=uyvy422,fps=fps={targetFps:0.##}:round=near",
+            "-vf", $"setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=uyvy422,fps=fps={frameRate:0.##}:round=near",
             "-pix_fmt", "uyvy422",
             "-fps_mode", "passthrough",
             "-max_muxing_queue_size", "4096",
@@ -144,136 +263,91 @@ public sealed partial class SrtReceiverEngine : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
 
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
+        using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var sessionToken = sessionCts.Token;
+
+        Process? process = null;
+        Thread? videoPump = null;
+        Thread? audioPump = null;
 
         try
         {
             Log($"[RX ENGINE] Launching: {_ffmpegPath} {string.Join(" ", args)}\n");
-            _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            _currentProcess = process;
 
-            _process.ErrorDataReceived += (_, e) =>
+            process.ErrorDataReceived += (_, e) =>
             {
                 if (e.Data is null) return;
                 Log(e.Data + "\n");
                 ParseProgress(e.Data);
             };
 
-            _process.Exited += (_, _) =>
-            {
-                Log($"[RX ENGINE] Receiver closed (Exit code: {_process?.ExitCode ?? 0})\n");
-                Stop();
-            };
+            process.Start();
+            process.BeginErrorReadLine();
 
-            _process.Start();
-            _process.BeginErrorReadLine();
+            var stdout = process.StandardOutput.BaseStream;
 
-            // 3. Start dedicated Video Pump Thread (MTA)
-            var stdout = _process.StandardOutput.BaseStream;
-            var deckLinkReady = new ManualResetEventSlim(false);
-
-            _videoPumpThread = new Thread(() => DedicatedVideoPump(settings, stdout, deckLinkReady, token))
+            videoPump = new Thread(() => DedicatedVideoPump(settings, width, height, frameRate, stdout, sessionToken))
             {
                 Name = "DeckLinkVideoPump",
                 IsBackground = true
             };
-            _videoPumpThread.SetApartmentState(ApartmentState.MTA);
-            _videoPumpThread.Start();
+            videoPump.SetApartmentState(ApartmentState.MTA);
+            videoPump.Start();
 
-            // 4. Start dedicated Audio Pump Thread (MTA)
-            if (_audioListener is not null)
+            if (audioListener is not null)
             {
-                _audioPumpThread = new Thread(() => DedicatedAudioPump(_audioListener, deckLinkReady, token))
+                audioPump = new Thread(() => DedicatedAudioPump(audioListener, sessionToken))
                 {
                     Name = "DeckLinkAudioPump",
                     IsBackground = true
                 };
-                _audioPumpThread.SetApartmentState(ApartmentState.MTA);
-                _audioPumpThread.Start();
+                audioPump.SetApartmentState(ApartmentState.MTA);
+                audioPump.Start();
             }
 
-            OnStatusChanged?.Invoke(true);
-            return true;
+            while (!process.HasExited && !sessionToken.IsCancellationRequested)
+            {
+                Thread.Sleep(100);
+            }
+
+            Log($"[RX ENGINE] Receiver session closed (Exit code: {process.ExitCode})\n");
         }
         catch (Exception ex)
         {
-            Log($"[RX ERROR] Failed to start receiver: {ex.Message}\n");
-            Stop();
-            return false;
+            Log($"[RX ERROR] Failed in receiver session: {ex.Message}\n");
+        }
+        finally
+        {
+            sessionCts.Cancel();
+
+            if (process is not null && !process.HasExited)
+            {
+                try { process.Kill(true); } catch { }
+            }
+            _currentProcess = null;
+
+            try { audioListener?.Stop(); } catch { }
+            if (_audioListener == audioListener) _audioListener = null;
+
+            videoPump?.Join(500);
+            audioPump?.Join(500);
+
+            _audioFifo.Clear();
         }
     }
 
-    public void Stop()
+    private void DedicatedVideoPump(RxSettings settings, int width, int height, double frameRate, Stream videoStream, CancellationToken token)
     {
-        _cts?.Cancel();
-
-        if (_process is not null && !_process.HasExited)
-        {
-            try
-            {
-                _process.Kill(true);
-            }
-            catch { }
-            _process = null;
-        }
-
-        try { _audioListener?.Stop(); } catch { }
-        _audioListener = null;
-
-        _videoPumpThread?.Join(1000);
-        _videoPumpThread = null;
-
-        _audioPumpThread?.Join(1000);
-        _audioPumpThread = null;
-
-        _audioFifo.Clear();
-
-        OnStatusChanged?.Invoke(false);
-    }
-
-    private void DedicatedVideoPump(RxSettings settings, Stream videoStream, ManualResetEventSlim deckLinkReady, CancellationToken token)
-    {
-        int width = 1920;
-        int height = 1080;
-        double frameRate = 25.0;
-
-        if (settings.EnableDeckLinkPlayout && !string.IsNullOrWhiteSpace(settings.DeckLinkDevice))
-        {
-            try
-            {
-                _deckLinkEngine = new DeckLinkOutputEngine();
-                var format = string.IsNullOrWhiteSpace(settings.FormatCode) ? "Hi50" : settings.FormatCode;
-                DeckLinkInterop.ResolveDisplayMode(format, out width, out height, out frameRate);
-                _deckLinkEngine.Initialize(settings.DeckLinkDevice, format, enableAudio: true);
-                Log($"[DECKLINK] Initialized SDI Output: {settings.DeckLinkDevice} ({format} {width}x{height} @ {frameRate:F2}fps)\n");
-                Log("[DECKLINK] Standby colorbars active on SDI out (locking monitor sync)\n");
-            }
-            catch (Exception ex)
-            {
-                Log($"[DECKLINK ERROR] Failed to initialize {settings.DeckLinkDevice}: {ex.Message}\n");
-                _deckLinkEngine?.Dispose();
-                _deckLinkEngine = null;
-            }
-        }
-        else
-        {
-            var format = string.IsNullOrWhiteSpace(settings.FormatCode) ? "Hi50" : settings.FormatCode;
-            DeckLinkInterop.ResolveDisplayMode(format, out width, out height, out frameRate);
-        }
-
-        deckLinkReady.Set();
-
         int frameBytes = width * height * 2; // UYVY422 = 2 bytes per pixel
         var frameBuffer = new byte[frameBytes];
         var frameNumber = 0L;
         var stopwatch = new Stopwatch();
         var frameTicks = (long)(Stopwatch.Frequency / frameRate);
 
-        // Audio cadence: 48kHz stereo 16-bit PCM (4 bytes per sample frame)
-        // At 25fps = 1,920 samples = 7,680 bytes per video frame
         int samplesPerFrame = (int)Math.Round(48000.0 / frameRate);
         int audioBytesPerFrame = samplesPerFrame * 4;
         var audioFrameBuffer = new byte[audioBytesPerFrame];
@@ -294,21 +368,15 @@ public sealed partial class SrtReceiverEngine : IDisposable
                 }
 
                 frameNumber++;
-
                 if (frameNumber == 1)
                 {
                     stopwatch.Start();
-                    Log("[RX ENGINE] First video frame received! Synchronous live playout active on DeckLink SDI.\n");
+                    Log("[RX ENGINE] First video frame received! Live playout active on DeckLink SDI.\n");
                 }
 
-                // Output to physical DeckLink SDI hardware (Synchronous Video + Audio on same thread)
                 if (_deckLinkEngine is not null)
                 {
-                    // 1. Synchronous Audio Playout:
-                    // Calculate lip-sync delay offset in bytes (48 samples/ms * 4 bytes/sample = 192 bytes/ms)
                     int delayOffsetBytes = (_audioDelayMs * 192);
-
-                    // Prevent buffer overflow / latency accumulation if video stalls
                     int maxAllowedBuffer = Math.Max(audioBytesPerFrame * 8, delayOffsetBytes + audioBytesPerFrame * 4);
                     if (_audioFifo.Count > maxAllowedBuffer)
                     {
@@ -320,7 +388,6 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
                     if (delayOffsetBytes > 0)
                     {
-                        // Audio delay requested: wait until buffer has accumulated the requested delay
                         if (_audioFifo.Count >= delayOffsetBytes + bytesToRead)
                         {
                             readAudio = _audioFifo.Read(audioFrameBuffer, 0, bytesToRead);
@@ -328,7 +395,6 @@ public sealed partial class SrtReceiverEngine : IDisposable
                     }
                     else if (delayOffsetBytes < 0)
                     {
-                        // Audio advance requested: drop |delayOffsetBytes| from the head
                         int advanceDrop = Math.Min(-delayOffsetBytes, _audioFifo.Count);
                         if (advanceDrop > 0)
                         {
@@ -343,13 +409,11 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
                     if (readAudio < bytesToRead)
                     {
-                        // Pad underruns with clean silence so hardware audio FIFO stays full
                         Array.Clear(audioFrameBuffer, readAudio, bytesToRead - readAudio);
                     }
 
                     _deckLinkEngine.WriteAudioPcm(audioFrameBuffer, bytesToRead, token);
 
-                    // 2. Synchronous Video Playout:
                     bool ok = _deckLinkEngine.DisplayVideoFrame(frameBuffer);
                     if (!ok && frameNumber % 50 == 1)
                     {
@@ -357,7 +421,6 @@ public sealed partial class SrtReceiverEngine : IDisposable
                     }
                 }
 
-                // In-App Preview (frame 1 immediately, then every 4th frame = ~6 fps preview to save UI CPU)
                 if (frameNumber == 1 || frameNumber % 4 == 0)
                 {
                     try
@@ -371,23 +434,18 @@ public sealed partial class SrtReceiverEngine : IDisposable
                 int logCadence = Math.Max((int)(frameRate * 5), 25);
                 if (frameNumber % logCadence == 0)
                 {
-                    Log($"[RX SDI] Continuous live playout: {frameNumber} frames ({frameNumber / frameRate:F1}s) | Audio played: {_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0} samples ({(_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0) / 48000.0:F1}s)\n");
+                    Log($"[RX SDI] Continuous live playout: {frameNumber} frames ({frameNumber / frameRate:F1}s) | Audio: {(_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0) / 48000.0:F1}s\n");
                 }
 
-                // Frame pacing
                 var targetTicks = frameNumber * frameTicks;
                 var remainingTicks = targetTicks - stopwatch.ElapsedTicks;
                 if (remainingTicks > 0)
                 {
                     var delayMs = (int)Math.Min(remainingTicks * 1000 / Stopwatch.Frequency, 35);
-                    if (delayMs > 0)
-                    {
-                        Thread.Sleep(delayMs);
-                    }
+                    if (delayMs > 0) Thread.Sleep(delayMs);
                 }
                 else if (remainingTicks < -frameTicks * 10)
                 {
-                    // If video lagged significantly behind wall clock, re-anchor baseline
                     stopwatch.Restart();
                     frameNumber = 0;
                 }
@@ -397,33 +455,20 @@ public sealed partial class SrtReceiverEngine : IDisposable
         {
             Log($"[RX PUMP ERROR] {ex.Message}\n");
         }
-        finally
-        {
-            _deckLinkEngine?.Dispose();
-            _deckLinkEngine = null;
-            Log("[DECKLINK] SDI Output closed.\n");
-        }
     }
 
-    private void DedicatedAudioPump(TcpListener listener, ManualResetEventSlim deckLinkReady, CancellationToken token)
+    private void DedicatedAudioPump(TcpListener listener, CancellationToken token)
     {
-        try
-        {
-            deckLinkReady.Wait(token);
-        }
-        catch (OperationCanceledException) { return; }
-
         TcpClient? client = null;
         try
         {
-            // Accept the incoming connection from FFmpeg asynchronously to honor cancellation
             var acceptTask = listener.AcceptTcpClientAsync(token).AsTask();
             acceptTask.Wait(token);
             client = acceptTask.Result;
 
             Log("[RX AUDIO] Connected to decoded PCM audio stream from FFmpeg!\n");
             var stream = client.GetStream();
-            var audioBuffer = new byte[7680]; // ~40ms chunk of 48kHz stereo 16-bit PCM (1920 sample frames * 4 bytes)
+            var audioBuffer = new byte[7680];
             int remainder = 0;
             long totalAudioBytes = 0;
 
@@ -433,7 +478,7 @@ public sealed partial class SrtReceiverEngine : IDisposable
                 if (read <= 0) break;
 
                 int totalBytes = remainder + read;
-                int usableBytes = (totalBytes / 4) * 4; // exact 4-byte frames for 16-bit stereo
+                int usableBytes = (totalBytes / 4) * 4;
                 remainder = totalBytes - usableBytes;
 
                 if (usableBytes > 0)
@@ -443,11 +488,10 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
                     if (totalAudioBytes % 960000 < usableBytes)
                     {
-                        Log($"[RX AUDIO] Received embedded SDI audio: {totalAudioBytes / 192000.0:F1}s | FIFO buffer: {_audioFifo.Count / 192.0:F0}ms | SDI samples played: {_deckLinkEngine?.TotalAudioSampleFramesWritten ?? 0}\n");
+                        Log($"[RX AUDIO] Received embedded SDI audio: {totalAudioBytes / 192000.0:F1}s | FIFO buffer: {_audioFifo.Count / 192.0:F0}ms\n");
                     }
                 }
 
-                // If any odd 1..3 bytes remain, copy them to start of buffer for next read
                 if (remainder > 0)
                 {
                     Buffer.BlockCopy(audioBuffer, usableBytes, audioBuffer, 0, remainder);
@@ -458,7 +502,10 @@ public sealed partial class SrtReceiverEngine : IDisposable
         catch (SocketException) { }
         catch (Exception ex)
         {
-            Log($"[RX AUDIO] Notice: {ex.Message}\n");
+            if (!token.IsCancellationRequested)
+            {
+                Log($"[RX AUDIO] Notice: {ex.Message}\n");
+            }
         }
         finally
         {

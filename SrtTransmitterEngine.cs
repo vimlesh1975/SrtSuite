@@ -40,7 +40,7 @@ public sealed partial class SrtTransmitterEngine : IDisposable
     public string BuildSrtUrl(TxSettings settings)
     {
         var host = string.IsNullOrWhiteSpace(settings.Host) ? "127.0.0.1" : settings.Host.Trim();
-        var port = settings.Port <= 0 ? 9998 : settings.Port;
+        var port = settings.Port <= 0 ? 5000 : settings.Port;
         var mode = settings.Mode == SrtMode.Listener ? "listener" : "caller";
         var query = new List<string>
         {
@@ -50,8 +50,14 @@ public sealed partial class SrtTransmitterEngine : IDisposable
             "transtype=live",
             "rcvbuf=67108864",
             "sndbuf=67108864",
-            "tlpktdrop=1"
+            "tlpktdrop=1",
+            "linger=0"
         };
+
+        if (mode == "caller")
+        {
+            query.Add("connect_timeout=10000");
+        }
 
         if (!string.IsNullOrWhiteSpace(settings.Passphrase))
             query.Add($"passphrase={Uri.EscapeDataString(settings.Passphrase.Trim())}");

@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Text;
 using DeckLinkAPI;
 
@@ -98,6 +100,21 @@ internal static class Program
         updateLogMethod.Invoke(form, new object[] { false });
         Console.WriteLine($"  * Logs Hidden: Form Height={form.Height}");
 
+        try
+        {
+            var applyThemeMethod = form.GetType().GetMethod("ApplyTheme", flags)!;
+            applyThemeMethod.Invoke(form, new object[] { "Dark" });
+            using var bmpDark = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(bmpDark, new Rectangle(0, 0, form.Width, form.Height));
+            bmpDark.Save(@"d:\_projects\SrtSuite\ui_dark.png", ImageFormat.Png);
+
+            applyThemeMethod.Invoke(form, new object[] { "Light" });
+            using var bmpLight = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(bmpLight, new Rectangle(0, 0, form.Width, form.Height));
+            bmpLight.Save(@"d:\_projects\SrtSuite\ui_light.png", ImageFormat.Png);
+        }
+        catch { }
+
         form.Close();
         sb.AppendLine("========================================");
         sb.AppendLine("[TEST-UI] All UI Verification Checks PASSED!");
@@ -143,7 +160,7 @@ internal static class Program
         var rxSettings = new RxSettings(
             Mode: SrtMode.Listener,
             Host: "0.0.0.0",
-            Port: 9998,
+            Port: 5000,
             LatencyMs: 120,
             Passphrase: "",
             StreamId: "",
@@ -163,7 +180,7 @@ internal static class Program
             Loop: false,
             Mode: SrtMode.Caller,
             Host: "127.0.0.1",
-            Port: 9998,
+            Port: 5000,
             LatencyMs: 120,
             Passphrase: "",
             StreamId: ""
@@ -176,26 +193,45 @@ internal static class Program
         Console.WriteLine("\n[TEST] Starting SRT Transmitter (NVENC + 48kHz AAC)...");
         tx.Start(txSettings);
 
-        Console.WriteLine("\n[TEST] Streaming for 10 seconds...");
-        for (int i = 1; i <= 10; i++)
+        Console.WriteLine("\n[TEST] Streaming session 1 for 4 seconds...");
+        for (int i = 1; i <= 4; i++)
         {
             Thread.Sleep(1000);
-            Console.WriteLine($"[TEST] Elapsed: {i}s | Preview frames received: {Interlocked.Read(ref rxFrames)}");
+            Console.WriteLine($"[TEST] Elapsed: {i}s | Preview frames: {Interlocked.Read(ref rxFrames)}");
         }
+        long session1Frames = Interlocked.Read(ref rxFrames);
 
-        long finalFrames = Interlocked.Read(ref rxFrames);
-        Console.WriteLine($"\n[TEST] Finished. Total preview frames received: {finalFrames}");
+        Console.WriteLine("\n[TEST] Disconnecting caller (stopping TX)...");
+        tx.Stop();
+        Thread.Sleep(3000);
+
+        bool receiverStillListening = rx.IsReceiving;
+        Console.WriteLine($"[TEST] Receiver still listening after caller disconnected? {(receiverStillListening ? "YES (PASS)" : "NO (FAIL)")}");
+
+        Console.WriteLine("\n[TEST] Reconnecting caller (re-starting TX)...");
+        tx.Start(txSettings);
+
+        Console.WriteLine("[TEST] Streaming session 2 for 4 seconds...");
+        for (int i = 1; i <= 4; i++)
+        {
+            Thread.Sleep(1000);
+            Console.WriteLine($"[TEST] Elapsed: {i}s | Preview frames: {Interlocked.Read(ref rxFrames)}");
+        }
+        long session2Frames = Interlocked.Read(ref rxFrames);
 
         tx.Stop();
         rx.Stop();
 
-        if (finalFrames > 10)
+        Console.WriteLine($"\n[TEST] Session 1 frames: {session1Frames}, Total frames after reconnect: {session2Frames}");
+        if (receiverStillListening && session2Frames > session1Frames)
         {
-            Console.WriteLine(">>> TEST PASSED: Video and Audio stream continuously without freezing! <<<");
+            Console.WriteLine(">>> TEST PASSED: Automatic Persistent Listening Verified! Receiver re-connected seamlessly! <<<");
+            File.WriteAllText("test_persistent.log", "PASS: Persistent listening verified!");
         }
         else
         {
-            Console.WriteLine(">>> TEST FAILED: Pipeline stalled! <<<");
+            Console.WriteLine(">>> TEST FAILED: Persistent listening failed! <<<");
+            File.WriteAllText("test_persistent.log", "FAIL: Persistent listening failed!");
         }
     }
 }

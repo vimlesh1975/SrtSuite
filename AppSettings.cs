@@ -14,7 +14,7 @@ public sealed class AppSettings
     public bool TxLoop { get; set; } = true;
     public string TxMode { get; set; } = "Caller (Send to remote)";
     public string TxHost { get; set; } = "127.0.0.1";
-    public int TxPort { get; set; } = 9998;
+    public int TxPort { get; set; } = 5000;
     public int TxLatency { get; set; } = 120;
     public string TxPassphrase { get; set; } = "";
     public string TxStreamId { get; set; } = "";
@@ -24,7 +24,7 @@ public sealed class AppSettings
     public string RxFormat { get; set; } = "Hi50 (1080i50 - Default)";
     public string RxMode { get; set; } = "Listener (Listen for incoming)";
     public string RxHost { get; set; } = "0.0.0.0";
-    public int RxPort { get; set; } = 9998;
+    public int RxPort { get; set; } = 5000;
     public int RxLatency { get; set; } = 120;
     public string RxPassphrase { get; set; } = "";
     public string RxStreamId { get; set; } = "";

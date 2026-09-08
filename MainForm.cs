@@ -341,7 +341,22 @@ public sealed partial class MainForm : Form
             if (IsDisposed || Disposing) return;
             BeginInvoke(() =>
             {
-                _lblRxStats.Text = $"FPS: {stats.Fps ?? "-"} | {stats.Bitrate ?? "-"} | {stats.Time ?? "-"}";
+                if (!string.IsNullOrEmpty(stats.Speed) && stats.Speed.Contains("Listening", StringComparison.OrdinalIgnoreCase))
+                {
+                    _lblRxStatusBadge.Text = "● LISTENING (AWAITING CALLER)";
+                    _lblRxStatusBadge.ForeColor = Color.FromArgb(245, 158, 11);
+                    _lblRxStats.Text = "FPS: - | Bitrate: - | Time: - (Awaiting caller)";
+                }
+                else if (!string.IsNullOrEmpty(stats.Speed) && stats.Speed.Contains("Reconnecting", StringComparison.OrdinalIgnoreCase))
+                {
+                    _lblRxStatusBadge.Text = "● RECONNECTING...";
+                    _lblRxStatusBadge.ForeColor = Color.FromArgb(245, 158, 11);
+                    _lblRxStats.Text = "FPS: - | Bitrate: - | Time: - (Reconnecting...)";
+                }
+                else
+                {
+                    _lblRxStats.Text = $"FPS: {stats.Fps ?? "-"} | {stats.Bitrate ?? "-"} | {stats.Time ?? "-"}";
+                }
             });
         };
 
@@ -352,10 +367,16 @@ public sealed partial class MainForm : Form
             {
                 _btnRxStart.Enabled = !running;
                 _btnRxStop.Enabled = running;
-                _lblRxStatusBadge.Text = running ? "● PLAYING (SDI)" : "○ IDLE";
-                _lblRxStatusBadge.ForeColor = running ? Color.FromArgb(59, 130, 246) : Color.FromArgb(156, 163, 175);
-                if (!running)
+                if (running)
                 {
+                    bool isListener = _cboRxMode.SelectedIndex == 0;
+                    _lblRxStatusBadge.Text = isListener ? "● LISTENING (AWAITING CALLER)" : "● CONNECTING...";
+                    _lblRxStatusBadge.ForeColor = Color.FromArgb(245, 158, 11);
+                }
+                else
+                {
+                    _lblRxStatusBadge.Text = "○ IDLE";
+                    _lblRxStatusBadge.ForeColor = Color.FromArgb(156, 163, 175);
                     _lblRxStats.Text = "FPS: - | Bitrate: - | Time: -";
                     var old = _picRxPreview.Image;
                     _picRxPreview.Image = null;
@@ -374,6 +395,11 @@ public sealed partial class MainForm : Form
 
             BeginInvoke(() =>
             {
+                if (_lblRxStatusBadge.Text != "● PLAYING (SDI)")
+                {
+                    _lblRxStatusBadge.Text = "● PLAYING (SDI)";
+                    _lblRxStatusBadge.ForeColor = Color.FromArgb(59, 130, 246);
+                }
                 var old = _picRxPreview.Image;
                 _picRxPreview.Image = bmp;
                 old?.Dispose();
@@ -1030,7 +1056,7 @@ public sealed partial class MainForm : Form
             Width = 50,
             Minimum = 1024,
             Maximum = 65535,
-            Value = 9998,
+            Value = 5000,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -1401,7 +1427,7 @@ public sealed partial class MainForm : Form
             Width = 50,
             Minimum = 1024,
             Maximum = 65535,
-            Value = 9998,
+            Value = 5000,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };

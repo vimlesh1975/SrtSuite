@@ -102,13 +102,13 @@ A fully compiled, self-contained Windows x64 build with all FFmpeg and DeckLink 
 1. **Right Panel (RX)**:
    - Check **Enable DeckLink Hardware SDI Output**.
    - Select your playout card (e.g. `DeckLink Duo (1)`).
-   - Set **SRT Mode** to `Listener`, Port `9998`.
+   - Set **SRT Mode** to `Listener`, Port `5000`.
    - Click **▶ START RECEIVER**. (The SDI monitor will immediately display standby colorbars).
 2. **Left Panel (TX)**:
    - Select **Source Type**: `DeckLink SDI Input`.
    - Select **DeckLink Card**: `DeckLink SDI 4K` (or your input card).
    - Set **Input Port**: `sdi`.
-   - Set **SRT Mode**: `Caller`, Target `127.0.0.1:9998`.
+   - Set **SRT Mode**: `Caller`, Target `127.0.0.1:5000`.
    - Click **▶ START TRANSMITTER**.
 3. **Result**:
    - Left monitor shows live incoming video feed from DeckLink SDI 4K.
@@ -165,7 +165,7 @@ User configurations are automatically persisted to `appsettings.json` in the app
   "TxLoop": true,
   "TxMode": "Caller (Send to remote)",
   "TxHost": "127.0.0.1",
-  "TxPort": 9998,
+  "TxPort": 5000,
   "TxLatency": 120,
   "TxPassphrase": "",
   "TxStreamId": "",
@@ -174,7 +174,7 @@ User configurations are automatically persisted to `appsettings.json` in the app
   "RxFormat": "Hi50 (1080i50 - Default)",
   "RxMode": "Listener (Listen for incoming)",
   "RxHost": "0.0.0.0",
-  "RxPort": 9998,
+  "RxPort": 5000,
   "RxLatency": 120,
   "RxPassphrase": "",
   "RxStreamId": ""
