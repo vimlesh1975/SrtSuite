@@ -40,7 +40,8 @@ public record RxSettings(
     bool EnableDeckLinkPlayout,
     string DeckLinkDevice,
     string FormatCode,
-    int AudioDelayMs = 0
+    int AudioDelayMs = 0,
+    bool EnableSystemAudio = true
 );
 
 public record StreamStats(

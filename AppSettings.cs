@@ -20,6 +20,7 @@ public sealed class AppSettings
     public string TxStreamId { get; set; } = "";
 
     public bool RxEnableDeckLink { get; set; } = true;
+    public bool RxEnableSystemAudio { get; set; } = true;
     public string RxDevice { get; set; } = "DeckLink Duo (1)";
     public string RxFormat { get; set; } = "Hi50 (1080i50 - Default)";
     public string RxMode { get; set; } = "Listener";

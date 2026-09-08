@@ -150,8 +150,41 @@ public sealed partial class SrtTransmitterEngine : IDisposable
             args.AddRange(new[] { "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2" });
         }
 
-        // Output #0: Main MPEG-TS stream to SRT (with explicit video and audio maps)
+        string audioInputLabel;
         if (settings.SourceType == SourceType.ColorBars)
+        {
+            audioInputLabel = "[1:a]";
+        }
+        else if (settings.SourceType == SourceType.File && !string.IsNullOrWhiteSpace(settings.FilePath))
+        {
+            bool hasAudio = ProbeHasAudioStream(settings.FilePath, _ffmpegPath);
+            if (hasAudio)
+            {
+                audioInputLabel = "[0:a]";
+            }
+            else
+            {
+                args.Add("-f"); args.Add("lavfi");
+                args.Add("-i"); args.Add("anullsrc=channel_layout=stereo:sample_rate=48000");
+                audioInputLabel = "[1:a]";
+            }
+        }
+        else
+        {
+            audioInputLabel = "[0:a]";
+        }
+
+        // Preview filter complex: Left VU (20px), Center Video (440px), Right VU (20px) -> Total 480x270 BGR24
+        var filterComplex = $"{audioInputLabel}aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo,asplit=2[l_src][r_src];" +
+            "[0:v]scale=440:270:force_original_aspect_ratio=decrease,pad=440:270:(ow-iw)/2:(oh-ih)/2,fps=8,format=yuv420p[v_scaled];" +
+            "[l_src]pan=mono|c0=c0,showvolume=r=8:w=80:h=270:f=0.92:b=1:t=0:v=1:dm=1:o=v:ds=log:p=0.18:m=r,scale=20:270,format=yuv420p,drawbox=x=0:y=0:w=iw:h=ih:color=0x56616d:t=2[left_bar];" +
+            "[r_src]pan=mono|c0=c1,showvolume=r=8:w=80:h=270:f=0.92:b=1:t=0:v=1:dm=1:o=v:ds=log:p=0.18:m=r,scale=20:270,format=yuv420p,drawbox=x=0:y=0:w=iw:h=ih:color=0x56616d:t=2[right_bar];" +
+            "[left_bar][v_scaled][right_bar]hstack=inputs=3,format=bgr24[tx_preview]";
+
+        args.AddRange(new[] { "-filter_complex", filterComplex });
+
+        // Output #0: Main MPEG-TS stream to SRT (with explicit video and audio maps)
+        if (settings.SourceType == SourceType.ColorBars || audioInputLabel == "[1:a]")
         {
             args.AddRange(new[] { "-map", "0:v:0", "-map", "1:a:0?", "-max_muxing_queue_size", "4096", "-f", "mpegts", srtUrl });
         }
@@ -160,8 +193,8 @@ public sealed partial class SrtTransmitterEngine : IDisposable
             args.AddRange(new[] { "-map", "0:v:0", "-map", "0:a:0?", "-max_muxing_queue_size", "4096", "-f", "mpegts", srtUrl });
         }
 
-        // Output #1: Lightweight BGR24 preview stream (480x270 @ 5 fps) to stdout pipe
-        args.AddRange(new[] { "-map", "0:v:0", "-vf", "fps=5,scale=480:270,format=bgr24", "-f", "rawvideo", "pipe:1" });
+        // Output #1: Lightweight BGR24 preview stream (480x270 with left/right audio meters @ 8 fps) to stdout pipe
+        args.AddRange(new[] { "-map", "[tx_preview]", "-f", "rawvideo", "pipe:1" });
 
         var psi = new ProcessStartInfo
         {
@@ -297,6 +330,34 @@ public sealed partial class SrtTransmitterEngine : IDisposable
 
     [GeneratedRegex(@"speed=\s*([\d\.]+x)")]
     private static partial Regex SpeedRegex();
+
+    private static bool ProbeHasAudioStream(string filePath, string ffmpegPath)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(ffmpegPath) ?? AppDomain.CurrentDomain.BaseDirectory;
+            var probePath = Path.Combine(dir, "ffprobe.exe");
+            if (!File.Exists(probePath)) return true;
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = probePath,
+                Arguments = $"-v error -select_streams a -show_entries stream=codec_type -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                var output = proc.StandardOutput.ReadToEnd();
+                proc.WaitForExit(1000);
+                return !string.IsNullOrWhiteSpace(output);
+            }
+        }
+        catch { }
+        return true;
+    }
 
     public void Dispose()
     {

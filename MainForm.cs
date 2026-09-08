@@ -62,6 +62,7 @@ public sealed partial class MainForm : Form
     private Label _lblRxTitle = null!;
     private PictureBox _picRxPreview = null!;
     private CheckBox _chkRxEnableDeckLink = null!;
+    private CheckBox _chkRxEnableSystemAudio = null!;
     private ComboBox _cboRxDevice = null!;
     private ComboBox _cboRxFormat = null!;
     private ComboBox _cboRxMode = null!;
@@ -122,6 +123,7 @@ public sealed partial class MainForm : Form
 
         // RX Settings
         _chkRxEnableDeckLink.Checked = _appSettings.RxEnableDeckLink;
+        _chkRxEnableSystemAudio.Checked = _appSettings.RxEnableSystemAudio;
         SelectComboItem(_cboRxFormat, _appSettings.RxFormat);
         SelectComboItem(_cboRxMode, _appSettings.RxMode);
         _txtRxHost.Text = _appSettings.RxHost;
@@ -180,6 +182,7 @@ public sealed partial class MainForm : Form
             _appSettings.TxStreamId = _txtTxStreamId.Text.Trim();
 
             _appSettings.RxEnableDeckLink = _chkRxEnableDeckLink.Checked;
+            _appSettings.RxEnableSystemAudio = _chkRxEnableSystemAudio.Checked;
             _appSettings.RxDevice = _cboRxDevice.SelectedItem?.ToString() ?? _appSettings.RxDevice;
             _appSettings.RxFormat = _cboRxFormat.SelectedItem?.ToString() ?? _appSettings.RxFormat;
             _appSettings.RxMode = _cboRxMode.SelectedItem?.ToString() ?? _appSettings.RxMode;
@@ -522,7 +525,8 @@ public sealed partial class MainForm : Form
             EnableDeckLinkPlayout: _chkRxEnableDeckLink.Checked,
             DeckLinkDevice: _cboRxDevice.SelectedItem?.ToString() ?? "DeckLink Duo (1)",
             FormatCode: formatCode,
-            AudioDelayMs: (int)_numRxAudioDelay.Value
+            AudioDelayMs: (int)_numRxAudioDelay.Value,
+            EnableSystemAudio: _chkRxEnableSystemAudio.Checked
         );
 
         _rxEngine.Start(settings);
@@ -640,6 +644,7 @@ public sealed partial class MainForm : Form
         _lblTxStats.ForeColor = isLight ? Color.FromArgb(5, 150, 105) : Color.FromArgb(110, 231, 183);
         _lblRxStats.ForeColor = isLight ? Color.FromArgb(37, 99, 235) : Color.FromArgb(147, 197, 253);
         _chkRxEnableDeckLink.ForeColor = isLight ? Color.FromArgb(30, 64, 175) : Color.FromArgb(147, 197, 253);
+        _chkRxEnableSystemAudio.ForeColor = isLight ? Color.FromArgb(5, 150, 105) : Color.FromArgb(52, 211, 153);
         _chkTxLoop.ForeColor = mutedLabel;
     }
 
@@ -1311,18 +1316,34 @@ public sealed partial class MainForm : Form
         };
 
         int y = 2;
-        // Row 1: DeckLink SDI Playout Settings & Audio Delay
+        // Row 1: DeckLink SDI Playout Settings, System Audio Out & Audio Delay
         _chkRxEnableDeckLink = new CheckBox
         {
-            Text = "DeckLink SDI Playout",
+            Text = "DeckLink SDI",
             Location = new Point(0, y + 1),
-            Width = 180,
+            Width = 100,
             AutoSize = true,
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(147, 197, 253),
             Checked = true
         };
         _pnlRxControls.Controls.Add(_chkRxEnableDeckLink);
+
+        _chkRxEnableSystemAudio = new CheckBox
+        {
+            Text = "PC Audio",
+            Location = new Point(106, y + 1),
+            Width = 96,
+            AutoSize = true,
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(52, 211, 153),
+            Checked = true
+        };
+        _chkRxEnableSystemAudio.CheckedChanged += (s, e) =>
+        {
+            _rxEngine.EnableSystemAudio = _chkRxEnableSystemAudio.Checked;
+        };
+        _pnlRxControls.Controls.Add(_chkRxEnableSystemAudio);
 
         _pnlRxControls.Controls.Add(CreateFieldLabel("Sync:", 212, y + 2));
         _numRxAudioDelay = new NumericUpDown

@@ -124,12 +124,13 @@ internal static class Program
             applyThemeMethod.Invoke(form, new object[] { "Dark" });
             using var bmpDark = new Bitmap(form.Width, form.Height);
             form.DrawToBitmap(bmpDark, new Rectangle(0, 0, form.Width, form.Height));
-            bmpDark.Save(@"d:\_projects\SrtSuite\ui_dark.png", ImageFormat.Png);
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            bmpDark.Save(Path.Combine(baseDir, "ui_dark.png"), ImageFormat.Png);
 
             applyThemeMethod.Invoke(form, new object[] { "Light" });
             using var bmpLight = new Bitmap(form.Width, form.Height);
             form.DrawToBitmap(bmpLight, new Rectangle(0, 0, form.Width, form.Height));
-            bmpLight.Save(@"d:\_projects\SrtSuite\ui_light.png", ImageFormat.Png);
+            bmpLight.Save(Path.Combine(baseDir, "ui_light.png"), ImageFormat.Png);
         }
         catch (Exception ex)
         {

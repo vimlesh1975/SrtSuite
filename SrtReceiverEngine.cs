@@ -19,11 +19,28 @@ public sealed partial class SrtReceiverEngine : IDisposable
     private readonly AudioFifo _audioFifo = new();
     private volatile int _audioDelayMs;
     private volatile bool _isRunning;
+    private volatile bool _enableSystemAudio = true;
+    private SystemAudioOutput? _systemAudioOutput;
+    private double _leftDbfs = -90.0;
+    private double _rightDbfs = -90.0;
 
     public int AudioDelayMs
     {
         get => _audioDelayMs;
         set => _audioDelayMs = value;
+    }
+
+    public bool EnableSystemAudio
+    {
+        get => _enableSystemAudio;
+        set
+        {
+            _enableSystemAudio = value;
+            if (!value)
+            {
+                _systemAudioOutput?.Flush();
+            }
+        }
     }
 
     public event Action<string>? OnLog;
@@ -92,6 +109,7 @@ public sealed partial class SrtReceiverEngine : IDisposable
         }
 
         _isRunning = true;
+        _enableSystemAudio = settings.EnableSystemAudio;
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
 
@@ -132,6 +150,9 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
         _deckLinkEngine?.Dispose();
         _deckLinkEngine = null;
+
+        _systemAudioOutput?.Dispose();
+        _systemAudioOutput = null;
 
         _audioFifo.Clear();
 
@@ -198,6 +219,8 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
         _deckLinkEngine?.Dispose();
         _deckLinkEngine = null;
+        _systemAudioOutput?.Dispose();
+        _systemAudioOutput = null;
         Log("[DECKLINK] SDI Output closed.\n");
 
         _isRunning = false;
@@ -425,7 +448,7 @@ public sealed partial class SrtReceiverEngine : IDisposable
                 {
                     try
                     {
-                        var bmp = ConvertUyvyToBitmapFast(frameBuffer, width, height, 480, 270);
+                        var bmp = CreateRxPreviewBitmapWithMeters(frameBuffer, width, height, 480, 270, _leftDbfs, _rightDbfs);
                         OnPreviewFrame?.Invoke(bmp);
                     }
                     catch { }
@@ -483,8 +506,32 @@ public sealed partial class SrtReceiverEngine : IDisposable
 
                 if (usableBytes > 0)
                 {
+                    // Calculate real-time left and right audio peak dBFS
+                    double maxL = 0;
+                    double maxR = 0;
+                    for (int i = 0; i < usableBytes; i += 4)
+                    {
+                        short l = (short)(audioBuffer[i] | (audioBuffer[i + 1] << 8));
+                        short r = (short)(audioBuffer[i + 2] | (audioBuffer[i + 3] << 8));
+                        if (Math.Abs(l) > maxL) maxL = Math.Abs(l);
+                        if (Math.Abs(r) > maxR) maxR = Math.Abs(r);
+                    }
+
+                    double lDb = (maxL > 0) ? 20.0 * Math.Log10(maxL / 32768.0) : -90.0;
+                    double rDb = (maxR > 0) ? 20.0 * Math.Log10(maxR / 32768.0) : -90.0;
+
+                    // Fast attack, smooth decay
+                    _leftDbfs = (lDb > _leftDbfs) ? lDb : (_leftDbfs * 0.88 + lDb * 0.12);
+                    _rightDbfs = (rDb > _rightDbfs) ? rDb : (_rightDbfs * 0.88 + rDb * 0.12);
+
                     _audioFifo.Write(audioBuffer, 0, usableBytes);
                     totalAudioBytes += usableBytes;
+
+                    if (_enableSystemAudio)
+                    {
+                        _systemAudioOutput ??= new SystemAudioOutput();
+                        _systemAudioOutput.WriteAudio(audioBuffer, usableBytes);
+                    }
 
                     if (totalAudioBytes % 960000 < usableBytes)
                     {
@@ -509,6 +556,8 @@ public sealed partial class SrtReceiverEngine : IDisposable
         }
         finally
         {
+            _leftDbfs = -90.0;
+            _rightDbfs = -90.0;
             client?.Dispose();
         }
     }
@@ -526,8 +575,12 @@ public sealed partial class SrtReceiverEngine : IDisposable
         return true;
     }
 
-    private static Bitmap ConvertUyvyToBitmapFast(byte[] uyvy, int srcW, int srcH, int dstW, int dstH)
+    private static Bitmap CreateRxPreviewBitmapWithMeters(byte[] uyvy, int srcW, int srcH, int dstW, int dstH, double leftDbfs, double rightDbfs)
     {
+        const int meterW = 20;
+        int videoW = dstW - (meterW * 2);
+        int videoH = dstH;
+
         var bmp = new Bitmap(dstW, dstH, PixelFormat.Format24bppRgb);
         var bmpData = bmp.LockBits(new Rectangle(0, 0, dstW, dstH), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
 
@@ -536,15 +589,16 @@ public sealed partial class SrtReceiverEngine : IDisposable
             byte* dstScan0 = (byte*)bmpData.Scan0;
             int dstStride = bmpData.Stride;
 
-            for (int y = 0; y < dstH; y++)
+            for (int y = 0; y < videoH; y++)
             {
-                int srcY = y * srcH / dstH;
+                int srcY = y * srcH / videoH;
                 int srcRowOffset = srcY * srcW * 2;
                 byte* dstRow = dstScan0 + (y * dstStride);
 
-                for (int x = 0; x < dstW; x++)
+                // Video rendered at offset X = meterW (20)
+                for (int vx = 0; vx < videoW; vx++)
                 {
-                    int srcX = x * srcW / dstW;
+                    int srcX = vx * srcW / videoW;
                     int pixelPair = srcX / 2;
                     int uyvyIdx = srcRowOffset + (pixelPair * 4);
 
@@ -560,15 +614,91 @@ public sealed partial class SrtReceiverEngine : IDisposable
                     int g = Math.Clamp((298 * c - 100 * d - 208 * e + 128) >> 8, 0, 255);
                     int b = Math.Clamp((298 * c + 516 * d + 128) >> 8, 0, 255);
 
-                    dstRow[x * 3] = (byte)b;
-                    dstRow[x * 3 + 1] = (byte)g;
-                    dstRow[x * 3 + 2] = (byte)r;
+                    int dstX = meterW + vx;
+                    dstRow[dstX * 3] = (byte)b;
+                    dstRow[dstX * 3 + 1] = (byte)g;
+                    dstRow[dstX * 3 + 2] = (byte)r;
                 }
             }
         }
 
         bmp.UnlockBits(bmpData);
+
+        using (var g = Graphics.FromImage(bmp))
+        {
+            DrawMeterRail(g, new Rectangle(0, 0, meterW, videoH), leftDbfs);
+            DrawMeterRail(g, new Rectangle(meterW + videoW, 0, meterW, videoH), rightDbfs);
+        }
+
         return bmp;
+    }
+
+    private static void DrawMeterRail(Graphics g, Rectangle bounds, double dbfs)
+    {
+        // Rail background
+        using (var bgBrush = new SolidBrush(Color.FromArgb(20, 22, 28)))
+        {
+            g.FillRectangle(bgBrush, bounds);
+        }
+
+        // Normalize dBFS: -60 dB to 0 dB mapped to 0.0 .. 1.0
+        double normalized = Math.Clamp((dbfs + 60.0) / 60.0, 0.0, 1.0);
+
+        const int insetX = 3;
+        const int insetY = 3;
+        int barWidth = Math.Max(1, bounds.Width - (insetX * 2));
+        int totalBarHeight = bounds.Height - (insetY * 2);
+
+        if (normalized > 0.01)
+        {
+            int levelHeight = Math.Max(2, (int)Math.Round(totalBarHeight * normalized));
+            int barTop = bounds.Bottom - insetY - levelHeight;
+            var levelBounds = new Rectangle(bounds.X + insetX, barTop, barWidth, levelHeight);
+
+            // Broadcast level color:
+            // > -3 dBFS: Red (peak/clipping)
+            // > -9 dBFS: Amber/Gold (high)
+            // Normal: Green
+            Color fillColor;
+            if (dbfs > -3.0)
+            {
+                fillColor = Color.FromArgb(224, 82, 82);
+            }
+            else if (dbfs > -9.0)
+            {
+                fillColor = Color.FromArgb(232, 181, 105);
+            }
+            else
+            {
+                fillColor = Color.FromArgb(91, 190, 125);
+            }
+
+            using var levelBrush = new SolidBrush(fillColor);
+            g.FillRectangle(levelBrush, levelBounds);
+
+            // Subtle bright cap line at the peak
+            using var capPen = new Pen(Color.White, 1f);
+            g.DrawLine(capPen, levelBounds.Left, levelBounds.Top, levelBounds.Right - 1, levelBounds.Top);
+        }
+
+        // Subtle tick marks at -6dB, -12dB, -18dB, -24dB
+        using (var tickPen = new Pen(Color.FromArgb(70, 78, 88), 1f))
+        {
+            double[] tickDbs = { -6.0, -12.0, -18.0, -24.0 };
+            foreach (var tDb in tickDbs)
+            {
+                double tNorm = (tDb + 60.0) / 60.0;
+                int tickY = bounds.Bottom - insetY - (int)Math.Round(totalBarHeight * tNorm);
+                g.DrawLine(tickPen, bounds.X + 1, tickY, bounds.X + 4, tickY);
+                g.DrawLine(tickPen, bounds.Right - 5, tickY, bounds.Right - 2, tickY);
+            }
+        }
+
+        // Rail border outline
+        using (var borderPen = new Pen(Color.FromArgb(86, 97, 109), 2f))
+        {
+            g.DrawRectangle(borderPen, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
+        }
     }
 
     private void ParseProgress(string line)
