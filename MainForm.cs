@@ -89,9 +89,11 @@ public sealed partial class MainForm : Form
         InitializeComponentCustom();
 
         _ffmpegPath = ResolveFfmpegPath();
-        _lblFfmpegStatus.Text = File.Exists(_ffmpegPath) 
-            ? $"FFmpeg: {_ffmpegPath}" 
-            : "WARNING: FFmpeg binary not found!";
+        bool ffmpegFound = File.Exists(_ffmpegPath);
+        _lblFfmpegStatus.Text = ffmpegFound ? "FFmpeg: Ready" : "WARNING: FFmpeg binary not found!";
+        _lblFfmpegStatus.ForeColor = ffmpegFound ? Color.FromArgb(52, 211, 153) : Color.FromArgb(239, 68, 68);
+        var tip = new ToolTip();
+        tip.SetToolTip(_lblFfmpegStatus, _ffmpegPath);
 
         _txEngine = new SrtTransmitterEngine(_ffmpegPath);
         _rxEngine = new SrtReceiverEngine(_ffmpegPath);
@@ -558,21 +560,17 @@ public sealed partial class MainForm : Form
         if (show)
         {
             _pnlTxSettings.Dock = DockStyle.Top;
-            _pnlTxSettings.Height = 224;
+            _pnlTxSettings.Height = 438;
             _pnlRxSettings.Dock = DockStyle.Top;
-            _pnlRxSettings.Height = 224;
+            _pnlRxSettings.Height = 438;
 
-            MinimumSize = new Size(1200, 520);
-            Height = Math.Max(Height, _heightWithLogs);
+            MinimumSize = new Size(800, 680);
+            Height = Math.Max(Height, 720);
         }
         else
         {
-            if (Height > 380)
-            {
-                _heightWithLogs = Height;
-            }
-            MinimumSize = new Size(1200, 330);
-            Height = 340;
+            MinimumSize = new Size(800, 500);
+            Height = 520;
 
             _pnlTxSettings.Dock = DockStyle.Fill;
             _pnlRxSettings.Dock = DockStyle.Fill;
@@ -683,8 +681,8 @@ public sealed partial class MainForm : Form
     private void InitializeComponentCustom()
     {
         Text = "SRT Broadcast Suite — Native Blackmagic SDI Playout & NVENC Streaming";
-        Size = new Size(1440, 340);
-        MinimumSize = new Size(1200, 330);
+        Size = new Size(840, 520);
+        MinimumSize = new Size(800, 500);
         AutoScaleMode = AutoScaleMode.None;
         BackColor = Color.FromArgb(20, 22, 26);
         ForeColor = Color.FromArgb(240, 243, 246);
@@ -833,11 +831,11 @@ public sealed partial class MainForm : Form
             Margin = new Padding(3)
         };
 
-        // Top Fixed Settings Area (Height 224px)
+        // Top Fixed Settings Area (Height 438px: Title 26 + Video 214 + Controls 194)
         _pnlTxSettings = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 224,
+            Height = 438,
             BackColor = Color.FromArgb(28, 31, 38)
         };
 
@@ -866,25 +864,21 @@ public sealed partial class MainForm : Form
         };
         pnlTitle.Controls.AddRange(new Control[] { _lblTxTitle, _lblTxStatusBadge });
 
-        // Body area below title: 2-column TableLayoutPanel (Controls Left, Preview Right)
-        var tblTxBody = new TableLayoutPanel
+        // Video Preview Monitor (Above Settings - 372 x 210)
+        _picTxPreview = new PictureBox
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-            Padding = new Padding(0)
+            Size = new Size(372, 210),
+            Location = new Point(4, 30),
+            BackColor = Color.Black,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BorderStyle = BorderStyle.FixedSingle
         };
-        tblTxBody.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 368f));
-        tblTxBody.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        tblTxBody.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-        // Left Side: TX Controls Container (Width 368)
+        // TX Controls Container (Below Video - Width 372, Height 192)
         _pnlTxControls = new Panel
         {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0),
+            Size = new Size(372, 192),
+            Location = new Point(4, 244),
             BackColor = Color.Transparent
         };
 
@@ -1142,23 +1136,17 @@ public sealed partial class MainForm : Form
 
         _pnlTxControls.Controls.AddRange(new Control[] { _btnTxStart, _btnTxStop, _lblTxStats });
 
-        // Right Side: TX Preview Monitor (Input Video to right of its settings)
-        _picTxPreview = new PictureBox
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.Black,
-            SizeMode = PictureBoxSizeMode.Zoom,
-            BorderStyle = BorderStyle.FixedSingle,
-            Margin = new Padding(4, 2, 2, 2)
-        };
-
-        tblTxBody.Controls.Add(_pnlTxControls, 0, 0);
-        tblTxBody.Controls.Add(_picTxPreview, 1, 0);
-
-        _pnlTxSettings.Controls.Add(tblTxBody);
+        _pnlTxSettings.Controls.Add(_pnlTxControls);
+        _pnlTxSettings.Controls.Add(_picTxPreview);
         _pnlTxSettings.Controls.Add(pnlTitle);
-        pnlTitle.SendToBack();
-        tblTxBody.BringToFront();
+
+        _pnlTxSettings.Resize += (_, _) =>
+        {
+            int offsetX = Math.Max(4, (_pnlTxSettings.ClientSize.Width - 372) / 2);
+            _picTxPreview.Left = offsetX;
+            _pnlTxControls.Left = offsetX;
+            _lblTxStatusBadge.Left = Math.Max(220, _pnlTxSettings.ClientSize.Width - _lblTxStatusBadge.Width - 8);
+        };
 
         // Log Console Area - Container docked Fill
         _pnlTxLogContainer = new Panel
@@ -1265,11 +1253,11 @@ public sealed partial class MainForm : Form
             Margin = new Padding(3)
         };
 
-        // Top Fixed Settings Area (Height 224px)
+        // Top Fixed Settings Area (Height 438px: Title 26 + Video 214 + Controls 194)
         _pnlRxSettings = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 224,
+            Height = 438,
             BackColor = Color.FromArgb(28, 31, 38)
         };
 
@@ -1298,35 +1286,21 @@ public sealed partial class MainForm : Form
         };
         pnlTitle.Controls.AddRange(new Control[] { _lblRxTitle, _lblRxStatusBadge });
 
-        // Body area below title: 2-column TableLayoutPanel (Preview Left, Controls Right)
-        var tblRxBody = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-            Padding = new Padding(0)
-        };
-        tblRxBody.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        tblRxBody.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 368f));
-        tblRxBody.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-
-        // Left Side: Output Video Preview (Fills remainder)
+        // Video Preview Monitor (Above Settings - 372 x 210)
         _picRxPreview = new PictureBox
         {
-            Dock = DockStyle.Fill,
+            Size = new Size(372, 210),
+            Location = new Point(4, 30),
             BackColor = Color.Black,
             SizeMode = PictureBoxSizeMode.Zoom,
-            BorderStyle = BorderStyle.FixedSingle,
-            Margin = new Padding(2, 2, 4, 2)
+            BorderStyle = BorderStyle.FixedSingle
         };
 
-        // Right Side: RX Controls Container (Width 368)
+        // RX Controls Container (Below Video - Width 372, Height 192)
         _pnlRxControls = new Panel
         {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0),
+            Size = new Size(372, 192),
+            Location = new Point(4, 244),
             BackColor = Color.Transparent
         };
 
@@ -1513,13 +1487,17 @@ public sealed partial class MainForm : Form
 
         _pnlRxControls.Controls.AddRange(new Control[] { _btnRxStart, _btnRxStop, _lblRxStats });
 
-        tblRxBody.Controls.Add(_picRxPreview, 0, 0);
-        tblRxBody.Controls.Add(_pnlRxControls, 1, 0);
-
-        _pnlRxSettings.Controls.Add(tblRxBody);
+        _pnlRxSettings.Controls.Add(_pnlRxControls);
+        _pnlRxSettings.Controls.Add(_picRxPreview);
         _pnlRxSettings.Controls.Add(pnlTitle);
-        pnlTitle.SendToBack();
-        tblRxBody.BringToFront();
+
+        _pnlRxSettings.Resize += (_, _) =>
+        {
+            int offsetX = Math.Max(4, (_pnlRxSettings.ClientSize.Width - 372) / 2);
+            _picRxPreview.Left = offsetX;
+            _pnlRxControls.Left = offsetX;
+            _lblRxStatusBadge.Left = Math.Max(220, _pnlRxSettings.ClientSize.Width - _lblRxStatusBadge.Width - 8);
+        };
 
         // Log Console Area - Container docked Fill
         _pnlRxLogContainer = new Panel

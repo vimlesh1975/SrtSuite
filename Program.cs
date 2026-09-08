@@ -71,13 +71,13 @@ internal static class Program
         sb.AppendLine($"[TEST-UI] RX Controls: Bounds={pnlRxControls.Bounds}, Visible={pnlRxControls.Visible}, Dock={pnlRxControls.Dock}");
         sb.AppendLine($"[TEST-UI] RX Preview:  Bounds={picRxPreview.Bounds}, Visible={picRxPreview.Visible}, Dock={picRxPreview.Dock}");
 
-        // Verify TX layout: controls on left, preview on right
-        bool txOk = pnlTxControls.Location.X <= picTxPreview.Location.X && pnlTxControls.Visible && picTxPreview.Visible;
-        Console.WriteLine($"[TEST-UI] TX Layout Verification (Settings Left, Preview Right): {(txOk ? "PASS" : "FAIL")}");
+        // Verify TX layout: preview above, controls below
+        bool txOk = picTxPreview.Location.Y <= pnlTxControls.Location.Y && pnlTxControls.Visible && picTxPreview.Visible;
+        Console.WriteLine($"[TEST-UI] TX Layout Verification (Preview Above, Settings Below): {(txOk ? "PASS" : "FAIL")}");
 
-        // Verify RX layout: preview on left, controls on right
-        bool rxOk = picRxPreview.Location.X <= pnlRxControls.Location.X && pnlRxControls.Visible && picRxPreview.Visible;
-        Console.WriteLine($"[TEST-UI] RX Layout Verification (Preview Left, Settings Right): {(rxOk ? "PASS" : "FAIL")}");
+        // Verify RX layout: preview above, controls below
+        bool rxOk = picRxPreview.Location.Y <= pnlRxControls.Location.Y && pnlRxControls.Visible && picRxPreview.Visible;
+        Console.WriteLine($"[TEST-UI] RX Layout Verification (Preview Above, Settings Below): {(rxOk ? "PASS" : "FAIL")}");
 
         // Verify RX Controls visibility and width
         bool rxVisible = pnlRxControls.Visible && pnlRxControls.Width >= 360 && pnlRxControls.Height > 100;
