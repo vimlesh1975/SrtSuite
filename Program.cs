@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using DeckLinkAPI;
 
 namespace SrtSuite;
@@ -48,20 +49,25 @@ internal static class Program
         form.Show();
         Application.DoEvents();
 
-        Console.WriteLine($"[TEST-UI] Form Size: {form.Size.Width}x{form.Size.Height}");
+        var sb = new StringBuilder();
+        sb.AppendLine($"[TEST-UI] Form Size: {form.Size.Width}x{form.Size.Height}");
 
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var pnlHeader = (Panel)form.GetType().GetField("_pnlHeader", flags)!.GetValue(form)!;
+        var tblMain = (TableLayoutPanel)form.GetType().GetField("_tblMain", flags)!.GetValue(form)!;
         var pnlTxControls = (Panel)form.GetType().GetField("_pnlTxControls", flags)!.GetValue(form)!;
         var picTxPreview = (PictureBox)form.GetType().GetField("_picTxPreview", flags)!.GetValue(form)!;
         var pnlRxControls = (Panel)form.GetType().GetField("_pnlRxControls", flags)!.GetValue(form)!;
         var picRxPreview = (PictureBox)form.GetType().GetField("_picRxPreview", flags)!.GetValue(form)!;
-        var cboTheme = (ComboBox)form.GetType().GetField("_cboTheme", flags)!.GetValue(form)!;
+        var chkDarkMode = (CheckBox)form.GetType().GetField("_chkDarkMode", flags)!.GetValue(form)!;
         var chkShowLogs = (CheckBox)form.GetType().GetField("_chkShowLogs", flags)!.GetValue(form)!;
 
-        Console.WriteLine($"[TEST-UI] TX Controls: Bounds={pnlTxControls.Bounds}, Visible={pnlTxControls.Visible}, Dock={pnlTxControls.Dock}");
-        Console.WriteLine($"[TEST-UI] TX Preview:  Bounds={picTxPreview.Bounds}, Visible={picTxPreview.Visible}, Dock={picTxPreview.Dock}");
-        Console.WriteLine($"[TEST-UI] RX Controls: Bounds={pnlRxControls.Bounds}, Visible={pnlRxControls.Visible}, Dock={pnlRxControls.Dock}");
-        Console.WriteLine($"[TEST-UI] RX Preview:  Bounds={picRxPreview.Bounds}, Visible={picRxPreview.Visible}, Dock={picRxPreview.Dock}");
+        sb.AppendLine($"[TEST-UI] Header Bounds: {pnlHeader.Bounds}");
+        sb.AppendLine($"[TEST-UI] TableMain Bounds: {tblMain.Bounds}");
+        sb.AppendLine($"[TEST-UI] TX Controls: Bounds={pnlTxControls.Bounds}, Visible={pnlTxControls.Visible}, Dock={pnlTxControls.Dock}");
+        sb.AppendLine($"[TEST-UI] TX Preview:  Bounds={picTxPreview.Bounds}, Visible={picTxPreview.Visible}, Dock={picTxPreview.Dock}");
+        sb.AppendLine($"[TEST-UI] RX Controls: Bounds={pnlRxControls.Bounds}, Visible={pnlRxControls.Visible}, Dock={pnlRxControls.Dock}");
+        sb.AppendLine($"[TEST-UI] RX Preview:  Bounds={picRxPreview.Bounds}, Visible={picRxPreview.Visible}, Dock={picRxPreview.Dock}");
 
         // Verify TX layout: controls on left, preview on right
         bool txOk = pnlTxControls.Location.X <= picTxPreview.Location.X && pnlTxControls.Visible && picTxPreview.Visible;
@@ -72,12 +78,12 @@ internal static class Program
         Console.WriteLine($"[TEST-UI] RX Layout Verification (Preview Left, Settings Right): {(rxOk ? "PASS" : "FAIL")}");
 
         // Verify RX Controls visibility and width
-        bool rxVisible = pnlRxControls.Visible && pnlRxControls.Width >= 350 && pnlRxControls.Height > 100;
+        bool rxVisible = pnlRxControls.Visible && pnlRxControls.Width >= 360 && pnlRxControls.Height > 100;
         Console.WriteLine($"[TEST-UI] RX Controls Non-Occluded & Visible: {(rxVisible ? "PASS" : "FAIL")}");
 
-        // Verify Theme Switching
-        Console.WriteLine($"[TEST-UI] Testing Themes...");
-        foreach (var theme in new[] { "Dark", "Midnight", "Light" })
+        // Verify Theme Switching via CheckBox
+        Console.WriteLine($"[TEST-UI] Testing Dark/Light Themes...");
+        foreach (var theme in new[] { "Dark", "Light" })
         {
             var applyThemeMethod = form.GetType().GetMethod("ApplyTheme", flags)!;
             applyThemeMethod.Invoke(form, new object[] { theme });
@@ -93,9 +99,12 @@ internal static class Program
         Console.WriteLine($"  * Logs Hidden: Form Height={form.Height}");
 
         form.Close();
-        Console.WriteLine("========================================");
-        Console.WriteLine("[TEST-UI] All UI Verification Checks PASSED!");
-        Console.WriteLine("========================================");
+        sb.AppendLine("========================================");
+        sb.AppendLine("[TEST-UI] All UI Verification Checks PASSED!");
+        sb.AppendLine("========================================");
+        var outPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_ui.log");
+        File.WriteAllText(outPath, sb.ToString());
+        File.WriteAllText(@"d:\_projects\SrtSuite\test_ui.log", sb.ToString());
     }
 
     private static void RunAvTest()

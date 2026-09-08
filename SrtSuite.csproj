@@ -23,4 +23,28 @@
     </Reference>
   </ItemGroup>
 
+  <!-- Create timestamped exe (e.g. SrtSuite_ddMMyyyyHHmmss.exe), delete old timestamped exes and un-suffixed SrtSuite.exe -->
+  <Target Name="TimestampExe" AfterTargets="Build">
+    <PropertyGroup>
+      <TimestampSuffix>$([System.DateTime]::Now.ToString("ddMMyyyyHHmmss"))</TimestampSuffix>
+    </PropertyGroup>
+    <ItemGroup>
+      <OldTargetExes Include="$(TargetDir)$(TargetName)_*.exe" />
+    </ItemGroup>
+    <Delete Files="@(OldTargetExes)" ContinueOnError="true" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).exe" DestinationFiles="$(TargetDir)$(TargetName)_$(TimestampSuffix).exe" Condition="Exists('$(TargetDir)$(TargetName).exe')" />
+    <Delete Files="$(TargetDir)$(TargetName).exe" Condition="Exists('$(TargetDir)$(TargetName).exe')" />
+  </Target>
+
+  <Target Name="TimestampPublishExe" AfterTargets="Publish">
+    <PropertyGroup>
+      <TimestampSuffix>$([System.DateTime]::Now.ToString("ddMMyyyyHHmmss"))</TimestampSuffix>
+    </PropertyGroup>
+    <ItemGroup>
+      <OldPublishExes Include="$(PublishDir)$(TargetName)_*.exe" />
+    </ItemGroup>
+    <Delete Files="@(OldPublishExes)" ContinueOnError="true" />
+    <Copy SourceFiles="$(PublishDir)$(TargetName).exe" DestinationFiles="$(PublishDir)$(TargetName)_$(TimestampSuffix).exe" Condition="'$(PublishDir)' != '' and Exists('$(PublishDir)$(TargetName).exe')" />
+    <Delete Files="$(PublishDir)$(TargetName).exe" Condition="'$(PublishDir)' != '' and Exists('$(PublishDir)$(TargetName).exe')" />
+  </Target>
 </Project>
