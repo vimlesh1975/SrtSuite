@@ -15,7 +15,7 @@ test_audio.log
 # Duplicate ffmpeg scratch folder (already included in bin/Release/net10.0-windows/win-x64)
 ffmpeg/
 
-# Allow Release output binaries explicitly except logs
+# Allow Release output binaries explicitly except logs and settings
 !bin/
 !bin/Release/
 !bin/Release/net10.0-windows/
@@ -24,3 +24,8 @@ ffmpeg/
 bin/**/rx.log
 bin/**/tx.log
 bin/**/*.log
+bin/**/appsettings.json
+appsettings.json
+**/appsettings.json
+*.settings.json
+

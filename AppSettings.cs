@@ -32,15 +32,16 @@ public sealed class AppSettings
     public bool ShowLogs { get; set; } = false;
     public string Theme { get; set; } = "Dark";
 
-    public static string SettingsFilePath
+    public static string SettingsDirectory
     {
         get
         {
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var path = Path.Combine(baseDir, "appsettings.json");
-            return path;
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            return Path.Combine(appData, "SrtSuite");
         }
     }
+
+    public static string SettingsFilePath => Path.Combine(SettingsDirectory, "appsettings.json");
 
     public static AppSettings Load()
     {
@@ -53,6 +54,16 @@ public sealed class AppSettings
                 var settings = JsonSerializer.Deserialize<AppSettings>(json);
                 if (settings != null) return settings;
             }
+            else
+            {
+                var legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+                if (File.Exists(legacyPath))
+                {
+                    var json = File.ReadAllText(legacyPath);
+                    var settings = JsonSerializer.Deserialize<AppSettings>(json);
+                    if (settings != null) return settings;
+                }
+            }
         }
         catch { }
         return new AppSettings();
@@ -62,6 +73,11 @@ public sealed class AppSettings
     {
         try
         {
+            var dir = SettingsDirectory;
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
             var path = SettingsFilePath;
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
             {

@@ -158,7 +158,7 @@ git lfs pull
 
 ## ⚙️ Configuration (`appsettings.json`)
 
-User configurations are automatically persisted to `appsettings.json` in the application directory:
+User configurations are automatically persisted to `%APPDATA%\SrtSuite\appsettings.json` (outside the repository/project folder):
 
 ```json
 {

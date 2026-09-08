@@ -148,8 +148,7 @@ internal static class Program
         finally
         {
             var outPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_ui.log");
-            File.WriteAllText(outPath, sb.ToString());
-            File.WriteAllText(@"d:\_projects\SrtSuite\test_ui.log", sb.ToString());
+            try { File.WriteAllText(outPath, sb.ToString()); } catch { }
         }
     }
 
