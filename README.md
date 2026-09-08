@@ -8,6 +8,8 @@
 
 **SRT Broadcast Suite** is a high-performance native C# desktop application built on **.NET 10 Windows Forms (x64)** for professional broadcast contribution, playout, and contribution monitoring. It provides synchronous **Blackmagic DeckLink SDI hardware input and output (1080i50 native)** with ultra-low latency **Secure Reliable Transport (SRT)** transmission.
 
+![SRT Broadcast Suite Interface](image.png)
+
 ---
 
 ## 🚀 Key Highlights
@@ -16,12 +18,16 @@
   - Direct hardware output via official Blackmagic DeckLink SDK (`DeckLinkAPI.Interop`).
   - Native 1080i50 (`bmdModeHD1080i50` / `Hi50`), 1080p50/p59.94/p25, 720p50, PAL 576i support.
   - Instant SDI carrier lock with synchronous standby SMPTE colorbars pattern on idle/disconnect.
+- **Automatic Persistent Listening**:
+  - Receiver listener stays permanently active and ready for incoming caller streams even across disconnects/reconnects.
+  - DeckLink hardware output maintains continuous SDI clock sync without recreating the output interface.
 - **16-Bit 48kHz Embedded SDI Audio**:
   - Broadcast-compliant 16-bit 48kHz stereo PCM embedded SDI audio (`bmdAudioSampleType16bitInteger`).
   - Synchronous video-pump audio clocking: perfectly eliminates COM threading/apartment marshaling errors (`E_NOINTERFACE`, `E_ACCESSDENIED`) and maintains rock-solid lip-sync.
-- **Dual Real-Time Preview Monitors**:
-  - **Left Panel (TX)**: Live in-app video monitor displaying captured SDI input or source video file.
-  - **Right Panel (RX)**: Live in-app video monitor displaying incoming SRT stream matching SDI playout.
+- **Dual Real-Time 16:9 Preview Monitors**:
+  - **Left Panel (TX)**: Live in-app 16:9 video preview placed directly above transmitter settings.
+  - **Right Panel (RX)**: Live in-app 16:9 video preview placed directly above receiver settings.
+  - Native aspect ratio scaling with zero vertical letterbox borders.
 - **Hardware-Accelerated Encoding (NVIDIA NVENC)**:
   - Zero-latency GPU encoding via `h264_nvenc` with low-latency tuning, fixed GOP (`-g 25 -bf 0`), and configurable bitrate.
   - CPU fallback (`libx264` veryfast/zerolatency) for systems without NVIDIA GPUs.
@@ -30,7 +36,7 @@
   - **Video File**: File streaming (`.mp4`, `.mkv`, `.ts`, `.mov`, `.avi`) with seamless looping.
   - **SMPTE Color Bars**: Built-in test generator with synchronized 1kHz sine audio tone.
 - **Persistent Settings Memory**:
-  - Automatically remembers selected DeckLink cards (TX input card, RX output card), video standards, bitrates, ports, and latency across app restarts via `appsettings.json`.
+  - Automatically remembers selected DeckLink cards (TX input card, RX output card), video standards, bitrates, ports (default `5000`), and latency across app restarts via `appsettings.json`.
 - **Production-Grade SRT Protocol**:
   - Caller (Push) and Listener (Server) connection modes.
   - Configurable latency buffer (20ms to 5000ms), packet loss recovery (`tlpktdrop`), and large socket ring buffers.
@@ -95,7 +101,8 @@ A fully compiled, self-contained Windows x64 build with all FFmpeg and DeckLink 
    ```
 2. Run the application:
    ```powershell
-   .\bin\Release\net10.0-windows\win-x64\SrtSuite.exe
+   # Run the latest timestamped build
+   .\bin\Release\net10.0-windows\win-x64\SrtSuite_*.exe
    ```
 
 ### 2. Live SDI In to SDI Out (Local Loopback)
