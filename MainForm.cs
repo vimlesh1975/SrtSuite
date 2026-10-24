@@ -1071,7 +1071,7 @@ public sealed partial class MainForm : Form
         _pnlTxControls.Controls.Add(CreateFieldLabel("Latency:", 0, y + 2));
         _numTxLatency = new NumericUpDown
         {
-            Location = new Point(48, y),
+            Location = new Point(54, y),
             Width = 46,
             Minimum = 20,
             Maximum = 5000,
@@ -1080,13 +1080,13 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlTxControls.Controls.Add(_numTxLatency);
-        _pnlTxControls.Controls.Add(CreateFieldLabel("ms", 96, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("ms", 102, y + 2));
 
-        _pnlTxControls.Controls.Add(CreateFieldLabel("Key:", 122, y + 2));
+        _pnlTxControls.Controls.Add(CreateFieldLabel("Key:", 126, y + 2));
         _txtTxPassphrase = new TextBox
         {
-            Location = new Point(150, y),
-            Width = 54,
+            Location = new Point(154, y),
+            Width = 52,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
@@ -1439,7 +1439,7 @@ public sealed partial class MainForm : Form
         _pnlRxControls.Controls.Add(CreateFieldLabel("Latency:", 0, y + 2));
         _numRxLatency = new NumericUpDown
         {
-            Location = new Point(48, y),
+            Location = new Point(54, y),
             Width = 46,
             Minimum = 20,
             Maximum = 5000,
@@ -1448,13 +1448,13 @@ public sealed partial class MainForm : Form
             ForeColor = Color.White
         };
         _pnlRxControls.Controls.Add(_numRxLatency);
-        _pnlRxControls.Controls.Add(CreateFieldLabel("ms", 96, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("ms", 102, y + 2));
 
-        _pnlRxControls.Controls.Add(CreateFieldLabel("Key:", 122, y + 2));
+        _pnlRxControls.Controls.Add(CreateFieldLabel("Key:", 126, y + 2));
         _txtRxPassphrase = new TextBox
         {
-            Location = new Point(150, y),
-            Width = 54,
+            Location = new Point(154, y),
+            Width = 52,
             BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = Color.White
         };
